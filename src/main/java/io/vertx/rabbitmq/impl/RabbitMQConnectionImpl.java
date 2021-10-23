@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,26 +46,35 @@ import org.slf4j.LoggerFactory;
  */
 public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListener {
   
-  @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQConnectionImpl.class);
   
   private final Vertx vertx;
   private final RabbitMQOptions config;
+  private String connectionName;
   
   private boolean connectedAtLeastOnce;
   private boolean established;
   private final Object connectingPromiseLock = new Object();
   private volatile Future<Connection> connectingFuture;
   private final Object connectionLock = new Object();
-  private volatile Connection connection;
+  private volatile Connection connection;  
 
   private int reconnectCount;
+  private long lastConnectedInstance = -1;
+  
+  private final AtomicLong connectCount = new AtomicLong();
+  private volatile boolean closed;
   
   public RabbitMQConnectionImpl(Vertx vertx, RabbitMQOptions config) {
     this.vertx = vertx;
     this.config = config;
   }
 
+  @Override
+  public long getConnectionInstance() {
+    return connectCount.get();
+  }
+  
   public boolean isEstablished() {
     return established;
   }
@@ -72,7 +82,12 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   public int getReconnectCount() {
     return reconnectCount;
   }
-    
+
+  @Override
+  public String getConnectionName() {
+    return connectionName;
+  }
+  
   private Connection rawConnect() throws IOException, TimeoutException {
     List<Address> addresses = null;
     ConnectionFactory cf = new ConnectionFactory();
@@ -108,6 +123,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     cf.setRequestedChannelMax(config.getRequestedChannelMax());
     cf.setNetworkRecoveryInterval(config.getNetworkRecoveryInterval());
     cf.setAutomaticRecoveryEnabled(config.isAutomaticRecoveryEnabled());
+    cf.setTopologyRecoveryEnabled(true);
 
     if (config.isSsl()) {
       //The RabbitMQ Client connection needs a JDK SSLContext, so force this setting.
@@ -119,10 +135,48 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
 
     cf.useNio();
 
+//    cf.setChannelRpcTimeout();
+//    cf.setChannelShouldCheckRpcResponseType();
+//    cf.setClientProperties();
+//    cf.setConnectionRecoveryTriggeringCondition();
+//    cf.setConnectionTimeout();
+//    cf.setCredentialsProvider();
+//    cf.setCredentialsRefreshService();
+//    cf.setErrorOnWriteListener();
+//    cf.setExceptionHandler();
+//    cf.setHandshakeTimeout();
+//    cf.setHeartbeatExecutor();
+//    cf.setMetricsCollector();
+//    cf.setNetworkRecoveryInterval();
+//    cf.setNioParams();
+//    cf.setRecoveryDelayHandler();
+//    cf.setRequestedChannelMax();
+//    cf.setRequestedFrameMax();
+//    cf.setRequestedHeartbeat();
+//    cf.setSaslConfig();
+//    cf.setSharedExecutor();
+//    cf.setShutdownExecutor();
+//    cf.setShutdownTimeout();
+//    cf.setSocketConfigurator();
+//    cf.setSocketFactory();
+//    cf.setSslContextFactory();
+//    cf.setSslContextFactory();
+//    cf.setThreadFactory();
+//    cf.setTopologyRecoveryEnabled();
+//    cf.setTopologyRecoveryExecutor();
+//    cf.setTopologyRecoveryFilter();
+//    cf.setTopologyRecoveryRetryHandler();
+//    cf.setTrafficListener();
+//    cf.setWorkPoolTimeout();
+    
+
     Connection conn = addresses == null
            ? cf.newConnection(config.getConnectionName())
            : cf.newConnection(addresses, config.getConnectionName());
-    
+    lastConnectedInstance = connectCount.incrementAndGet();
+    connectionName = config.getConnectionName();
+    conn.setId(Long.toString(lastConnectedInstance));
+    logger.info("Established connection {} to {}:{}", conn.getId(), conn.getAddress(), conn.getPort());
     conn.addShutdownListener(this);
     
     return conn;
@@ -130,13 +184,14 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
 
   @Override
   public void shutdownCompleted(ShutdownSignalException cause) {
-    logger.info("Connection Shutdown: {}", cause.getMessage());
+    logger.info("Connection {} Shutdown: {}", ((Connection) cause.getReference()).getId(), cause.getMessage());
   }
   
   protected boolean shouldRetryConnection() {
     if ((config.getReconnectInterval() > 0) 
             && ((config.getReconnectAttempts() < 0) || config.getReconnectAttempts() > reconnectCount)
             && (connectedAtLeastOnce || config.isReconnectOnInitialConnection())
+            && !closed
             ) {
       ++reconnectCount;
       return true;
@@ -148,10 +203,17 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   private void connectBlocking(Promise<Connection> promise) {
     try {
       synchronized(connectionLock) {
-        connection = rawConnect();
+        if (connection == null || !connection.isOpen()) {
+          if (connectCount.get() > 0) {
+            logger.info("Reconnecting to {} ", config.getUri() == null ? config.getHost() + ":" + config.getPort() : config.getUri());
+          } else {
+            logger.info("Connecting to {} ", config.getUri() == null ? config.getHost() + ":" + config.getPort() : config.getUri());
+          }
+          connection = rawConnect();
+          connectedAtLeastOnce = true;
+        }
+        promise.complete(connection);
       }
-      connectedAtLeastOnce = true;
-      promise.complete(connection);
     } catch(Throwable ex) {
       logger.error("Failed to create connection: ", ex);
       if (shouldRetryConnection()) {
@@ -162,10 +224,17 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     }
   }  
   
-  public Future<Channel> openChannel() {
+  public Future<Channel> openChannel(long lastInstance) {
     synchronized(connectingPromiseLock) {
-      if (connectingFuture == null) {
-        reconnectCount = 0;
+      if (((connectingFuture == null) || (lastInstance != this.connectCount.get())) && !closed) {
+        synchronized(connectionLock) {       
+          if (lastConnectedInstance > 0) {
+            logger.info("Break");
+          }
+          if (lastConnectedInstance != connectCount.get()) {
+            reconnectCount = 0;
+          }
+        }
         Promise<Connection> connectingPromise = Promise.promise();
         connectingFuture = connectingPromise.future();
         vertx.executeBlocking(execPromise -> connectBlocking(connectingPromise));
@@ -173,12 +242,12 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
       return connectingFuture
               .compose(conn -> {
                 return vertx.executeBlocking(promise -> {
-                  try {
+                  try {                    
                     promise.complete(conn.createChannel());
                   } catch(IOException ex) {
                     logger.error("Failed to create channel: ", ex);
                     if (shouldRetryConnection()) {
-                      openChannel().onComplete(promise);
+                      openChannel(lastInstance).onComplete(promise);
                     }
                     promise.fail(ex);
                   }
@@ -189,7 +258,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
 
   @Override
   public RabbitMQChannel createChannel() {
-    return new RabbitMQChannelImpl(vertx, this);
+    return new RabbitMQChannelImpl(vertx, this, config);
   }
 
   @Override
@@ -199,12 +268,24 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
 
   @Override
   public Future<Void> close(int closeCode, String closeMessage, int timeout) {
-    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    Connection conn = connection;
+    closed = true;
+    if (conn == null) {
+      return Future.succeededFuture();
+    }
+    return vertx.executeBlocking(promise -> {
+      try {        
+        conn.close(closeCode, closeMessage, timeout);
+        promise.complete();
+      } catch(Throwable ex) {
+        promise.fail(ex);
+      }
+    });
   }
 
   @Override
-  public void close() throws Exception {
-    close(AMQP.REPLY_SUCCESS, "OK", config.getHandshakeTimeout());
+  public Future<Void> close() {
+    return close(AMQP.REPLY_SUCCESS, "OK", config.getHandshakeTimeout());
   }
   
 }

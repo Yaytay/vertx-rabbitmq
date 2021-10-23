@@ -20,17 +20,24 @@ import com.rabbitmq.client.BuiltinExchangeType;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.ConfirmCallback;
 import com.rabbitmq.client.Consumer;
+import com.rabbitmq.client.Recoverable;
+import com.rabbitmq.client.RecoveryListener;
 import com.rabbitmq.client.ShutdownListener;
 import com.rabbitmq.client.ShutdownSignalException;
 import io.vertx.core.AsyncResult;
+import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
-import io.vertx.core.impl.ContextInternal;
+import io.vertx.core.streams.ReadStream;
 import io.vertx.rabbitmq.RabbitMQChannel;
+import io.vertx.rabbitmq.RabbitMQConfirmation;
 import io.vertx.rabbitmq.RabbitMQConsumer;
+import io.vertx.rabbitmq.RabbitMQConsumerOptions;
+import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.rabbitmq.RabbitMQPublisher;
+import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -45,39 +52,82 @@ import org.slf4j.LoggerFactory;
  */
 public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   
-  @SuppressWarnings("constantname")
-  private static final Logger logger = LoggerFactory.getLogger(RabbitMQChannelImpl.class);
+  private static final Logger log = LoggerFactory.getLogger(RabbitMQChannelImpl.class);
   
   private final Vertx vertx;
   private final RabbitMQConnectionImpl connection;
+  private final Context context;
   
   private volatile Channel channel;
+  private volatile String channelId;
   
   private final List<Handler<Promise<Void>>> channelEstablishedCallbacks = new ArrayList<>();
+  private final List<Handler<RabbitMQChannel>> channelRecoveryCallbacks = new ArrayList<>();
+  private final List<Handler<ShutdownSignalException>> shutdownHandlers = new ArrayList<>();
+  private final Object publishLock = new Object();
+  private long knownConnectionInstance;
+  private final int retries;
+  private volatile boolean closed;
 
-  public RabbitMQChannelImpl(Vertx vertx, RabbitMQConnectionImpl connection) {
+
+  public RabbitMQChannelImpl(Vertx vertx, RabbitMQConnectionImpl connection, RabbitMQOptions options) {
     this.vertx = vertx;
     this.connection = connection;
+    this.retries = options.getReconnectAttempts();
+    this.context = vertx.getOrCreateContext();
   }
-
+  
   @Override
   public void addChannelEstablishedCallback(Handler<Promise<Void>> channelEstablishedCallback) {
     synchronized(channelEstablishedCallbacks) {
       channelEstablishedCallbacks.add(channelEstablishedCallback);
     }
   }
+  
+  @Override
+  public void addChannelRecoveryCallback(Handler<RabbitMQChannel> channelRecoveryCallback) {
+    synchronized(channelRecoveryCallbacks) {
+      channelRecoveryCallbacks.add(channelRecoveryCallback);
+    }
+  }  
 
   @Override
-  public RabbitMQPublisher publish(String exchange) {
-    return new RabbitMQPublisherImpl(vertx, this);
+  public void addChannelShutdownHandler(Handler<ShutdownSignalException> handler) {
+    synchronized(shutdownHandlers) {
+      shutdownHandlers.add(handler);
+    }
   }
 
   @Override
-  public RabbitMQConsumer consumer(String queue) {
-    return new RabbitMQConsumerImpl(vertx, this);
+  public RabbitMQPublisher createPublisher(String exchange, RabbitMQPublisherOptions options) {
+    return new RabbitMQPublisherImpl(vertx, this, exchange, options, retries > 0);
   }
-    
-  private void channelCallbackHandler(AsyncResult<Void> prevResult, Iterator<Handler<Promise<Void>>> iter, Promise<Void> connectPromise) {
+
+  @Override
+  public RabbitMQConsumer createConsumer(String queue, RabbitMQConsumerOptions options) {
+    RabbitMQConsumerImpl consumer = new RabbitMQConsumerImpl(vertx.getOrCreateContext(), this, queue, options, retries > 0);    
+    return consumer;
+  }
+
+  @Override
+  public Future<ReadStream<RabbitMQConfirmation>> addConfirmListener(int maxQueueSize) {
+
+    return onChannel(() -> {
+
+      RabbitMQConfirmListenerImpl listener = new RabbitMQConfirmListenerImpl(this, vertx.getOrCreateContext(), maxQueueSize);
+      channel.addConfirmListener(listener);
+      channel.confirmSelect();
+
+      return listener;
+    });
+  }
+
+  @Override
+  public String getChannelId() {
+    return channelId;
+  }
+  
+  private static void channelCallbackHandler(AsyncResult<Void> prevResult, Iterator<Handler<Promise<Void>>> iter, Promise<Void> connectPromise) {
     try {
       if (prevResult.failed()) {
         connectPromise.fail(prevResult.cause());
@@ -92,7 +142,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
         }
       }
     } catch (Throwable ex) {
-      logger.error("Exception whilst running channel established callback: ", ex);
+      log.error("Exception whilst running channel established callback: ", ex);
       connectPromise.fail(ex);
     }
   }
@@ -101,14 +151,37 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   public Future<Void> connect() {
     
     Promise<Void> result = Promise.promise();
-    connection.openChannel()
+    connection.openChannel(this.knownConnectionInstance)
             .onComplete(ar -> {
                     if (ar.failed()) {
                       result.fail(ar.cause());
                     } else {
-                      Channel chann = ar.result();
-                      this.channel = chann;
-                      chann.addShutdownListener(this);
+                      this.knownConnectionInstance = connection.getConnectionInstance();
+                      this.channel = ar.result();
+                      this.channelId = connection.getConnectionName() + ":" + Long.toString(knownConnectionInstance) + ":" + channel.getChannelNumber();
+                      channel.addShutdownListener(this);
+                      
+                      if (channel instanceof Recoverable) {
+                        Recoverable recoverable = (Recoverable) channel;
+                        RabbitMQChannel outerChannel = this;
+                        recoverable.addRecoveryListener(new RecoveryListener() {
+                          @Override
+                          public void handleRecovery(Recoverable recoverable) {
+                            log.info("Channel {} recovered", recoverable);
+                            List<Handler<RabbitMQChannel>> callbacks;
+                            synchronized(channelRecoveryCallbacks) {
+                              callbacks = new ArrayList<>(channelRecoveryCallbacks);
+                            } 
+                            for (Handler<RabbitMQChannel> handler : callbacks) {
+                              handler.handle(outerChannel);
+                            }
+                          }
+
+                          @Override
+                          public void handleRecoveryStarted(Recoverable recoverable) {
+                          }
+                        });
+                      }
 
                       List<Handler<Promise<Void>>> callbacks;
                       synchronized(channelEstablishedCallbacks) {
@@ -127,7 +200,13 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
 
   @Override
   public void shutdownCompleted(ShutdownSignalException cause) {
-    logger.info("Channel Shutdown: {}", cause.getMessage());
+    if (retries > 0) {
+      this.knownConnectionInstance = -1;
+    }
+    log.info("Channel {} Shutdown: {}", this, cause.getMessage());
+    for (Handler<ShutdownSignalException> handler : shutdownHandlers) {
+      handler.handle(cause);
+    }
   }
     
   private interface ChannelHandler<T> {
@@ -135,11 +214,10 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   }
   
   private <T> Future<T> onChannel(ChannelHandler<T> handler) {
-    ContextInternal ctx = (ContextInternal) vertx.getOrCreateContext();
-    if (channel == null || !channel.isOpen()) {
+    if ((channel == null || !channel.isOpen()) && !closed) {
       return connect().compose(v -> onChannel(handler));
     }
-    return vertx.executeBlocking(future -> {
+    return context.executeBlocking(future -> {
       try {
         T t = handler.handle();
         future.complete(t);
@@ -163,39 +241,80 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     
   }
   
+  
   @Override
-  public Future<Void> basicAck(long deliveryTag, boolean multiple) {
-    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+  public Future<Void> basicAck(String channelId, long deliveryTag, boolean multiple) {
+    
+    if (channelId == null) {
+      return Future.failedFuture(new IllegalArgumentException("channelId may not be null"));
+    }
+    return onChannel(() -> {
+      if (channelId.equals(this.channelId)) {
+        channel.basicAck(deliveryTag, multiple);
+      }
+      return null;
+    });
+    
   }
 
   @Override
-  public Future<Void> basicConsume(String queue, Consumer consumer) {
+  public Future<Void> basicCancel(String consumerTag) {
     
     return onChannel(() -> {
-      return channel.basicConsume(queue, consumer);
+      channel.basicCancel(consumerTag);
+      return null;
+    });
+    
+  }
+
+  
+  @Override
+  public Future<Void> basicConsume(String queue, boolean autoAck, Consumer consumer) {
+    
+    return onChannel(() -> {
+      return channel.basicConsume(queue, autoAck, channelId, consumer);
     }).mapEmpty();
     
   }
 
   @Override
   public Future<Void> basicPublish(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body) {
+    return basicPublish(exchange, routingKey, mandatory, props, body, null);
+  }
     
+  @Override
+  public Future<Void> basicPublish(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body, Handler<Long> deliveryTagHandler) {
     /**
      * This is an optimisation that avoids considering basicPublish to be a blocking operation as it translates directly to an NIO call.
      * This is only valid if:
      * 1. The RabbitMQClient is using NIO.
      * 2. Synchronous confirms are not enabled.
+     * both of which are mandated by this version of the client.
+     * 
+     * Synchronizing is necessary because this introduces a race condition in the generation of the delivery tag.
      */
     try {
       if (channel != null && channel.isOpen()) {
-        channel.basicPublish(exchange, routingKey, mandatory, props, body);
-        return Future.succeededFuture();
+        synchronized(publishLock) {
+          if (deliveryTagHandler != null) {
+            long deliveryTag = channel.getNextPublishSeqNo();
+            deliveryTagHandler.handle(deliveryTag);
+          }
+          channel.basicPublish(exchange, routingKey, mandatory, props, body);
+          return Future.succeededFuture();
+        }
       }
     } catch(IOException ex) {
-      logger.warn("Synchronous send of basicPublish({}, {}, {}, ...) failed: ", exchange, routingKey, mandatory, ex);
+      log.warn("Synchronous send of basicPublish({}, {}, {}, ...) failed: ", exchange, routingKey, mandatory, ex);
     }
     
     return onChannel(() -> {
+      synchronized(publishLock) {
+        if (deliveryTagHandler != null) {
+          long deliveryTag = channel.getNextPublishSeqNo();
+          deliveryTagHandler.handle(deliveryTag);
+        }
+      }
       channel.basicPublish(exchange, routingKey, mandatory, props, body);
       return null;
     }).mapEmpty();
@@ -245,8 +364,25 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   }
 
   @Override
-  public void close() throws Exception {
-    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+  public Future<Void> close() {
+    return close(AMQP.REPLY_SUCCESS, "OK");
+  }
+    
+  @Override
+  public Future<Void> close(int closeCode, String closeMessage) {
+    Channel chann = channel;
+    closed = true;
+    if (chann == null || !chann.isOpen()) {
+      return Future.succeededFuture();
+    }
+    return vertx.executeBlocking(promise -> {
+      try {
+        chann.close(closeCode, closeMessage);
+        promise.complete();
+      } catch (Throwable t) {
+        promise.fail(t);
+      }
+    });
   }
   
   

@@ -1,7 +1,7 @@
 package io.vertx.rabbitmq;
 
 import com.rabbitmq.client.AMQP;
-import com.rabbitmq.client.BasicProperties;
+import com.rabbitmq.client.AMQP.BasicProperties;
 import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
@@ -62,6 +62,14 @@ public interface RabbitMQPublisher extends AutoCloseable {
    */
   @GenIgnore(GenIgnore.PERMITTED_TYPE)
   void publish(String routingKey, BasicProperties properties, Buffer body);
+
+  /**
+   * Publish a message. 
+   * 
+   * @see com.rabbitmq.client.Channel#basicPublish(String, String, AMQP.BasicProperties, byte[])
+   */
+  @GenIgnore(GenIgnore.PERMITTED_TYPE)
+  void publish(String routingKey, BasicProperties properties, byte[] body);
 
   /**
    * Get the number of published, but not sent, messages.

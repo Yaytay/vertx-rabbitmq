@@ -19,17 +19,19 @@ import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.BuiltinExchangeType;
 import com.rabbitmq.client.ConfirmCallback;
 import com.rabbitmq.client.Consumer;
+import com.rabbitmq.client.ShutdownSignalException;
 import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
+import io.vertx.core.streams.ReadStream;
 import java.util.Map;
 
 /**
  *
  * @author jtalbut
  */
-public interface RabbitMQChannel extends AutoCloseable {
+public interface RabbitMQChannel {
   
   /**
    * Establish a Channel to the RabbitMQ server.
@@ -67,26 +69,57 @@ public interface RabbitMQChannel extends AutoCloseable {
   void addChannelEstablishedCallback(Handler<Promise<Void>> channelEstablishedCallback);
   
   /**
+   * Add a callback that will be called whenever the channel completes its own internal recovery process.
+   * This callback must be idempotent - it will be called each time a connection is established, which may be multiple times against the same instance.
+   * Callbacks will be added to a list and called in the order they were added, the only way to remove callbacks is to create a new channel.
+   * 
+   * This callback is only useful if RabbitMQOptions.automaticRecoveryEnabled is true.
+   * 
+   * Callbacks can be used for any kind of resetting that clients need to perform after the automatic recovery is complete.
+   * 
+   * Callbacks will be called on a RabbitMQ thread, after topology recovery, and will block the completion of the recovery.
+   * 
+   * @param channelRecoveryCallback 
+   */
+  void addChannelRecoveryCallback(Handler<RabbitMQChannel> channelRecoveryCallback);
+  
+  void addChannelShutdownHandler(Handler<ShutdownSignalException> handler);
+  
+  /**
    * Creates a RabbitMQPublisher on this channel that reliably sends messages.
    * @param exchange The exchange that messages are to be sent to.
+   * @param options Options for configuring the publisher.
    * @return a RabbitMQPublisher on this channel that reliably sends messages.
    */
-  RabbitMQPublisher publish(String exchange);
+  RabbitMQPublisher createPublisher(String exchange, RabbitMQPublisherOptions options);
   
   /**
    * Create a RabbitMQConsumer on this channel that reliably receives messages.
    * @param queue The queue that messages are being pushed from.
-   * @return a RabbitMQConsumer on this channel that reliably receives messages.
+   * @param options Options for configuring the consumer.
+   * @return a RabbitMQConsumer on this channel that can reliably receives messages.
+   * After being constructed and configured the RabbitMQConsumer should be passed to the basicConsume method.
    */
-  RabbitMQConsumer consumer(String queue);
+  RabbitMQConsumer createConsumer(String queue, RabbitMQConsumerOptions options);
+  
+  Future<ReadStream<RabbitMQConfirmation>> addConfirmListener(int maxQueueSize);
+  
+  /**
+   * Returns an identifier of the underlying channel.
+   * This is made up of the connection instance and the channel number.
+   * @return an identifier of the underlying channel.
+   */
+  String getChannelId();
   
   Future<Void> abort(int closeCode, String closeMessage);
   
   Future<Void> addConfirmListener(ConfirmCallback ackCallback, ConfirmCallback nackCallback);
   
-  Future<Void> basicAck(long deliveryTag, boolean multiple);
+  Future<Void> basicAck(String channelId, long deliveryTag, boolean multiple);
   
-  Future<Void> basicConsume(String queue, Consumer consumer);
+  Future<Void> basicCancel(String consumerTag);
+  
+  Future<Void> basicConsume(String queue, boolean autoAck, Consumer consumer);
   
   Future<Void> basicQos(int prefetchSize, int prefetchCount, boolean global);
   
@@ -101,4 +134,11 @@ public interface RabbitMQChannel extends AutoCloseable {
   Future<Void> queueBind(String queue, String exchange, String routingKey, Map<String,Object> arguments);
   
   Future<Void> basicPublish(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body);
+  
+  Future<Void> basicPublish(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body, Handler<Long> deliveryTagHandler);
+  
+  Future<Void> close();
+  
+  Future<Void> close(int closeCode, String closeMessage);
+    
 }

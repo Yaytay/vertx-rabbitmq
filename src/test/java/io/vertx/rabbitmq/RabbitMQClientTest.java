@@ -20,6 +20,7 @@ import com.rabbitmq.client.BuiltinExchangeType;
 import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.ShutdownSignalException;
+import io.vertx.core.Promise;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.RunTestOnContext;
@@ -67,7 +68,9 @@ public class RabbitMQClientTest {
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 logger.info("Completing test");
-                async.complete();
+                connection.close().onComplete(ar2 -> {
+                  async.complete();                     
+                });
               } else {
                 logger.info("Failing test");
                 context.fail(ar.cause());
@@ -79,11 +82,11 @@ public class RabbitMQClientTest {
   private static final class TestConsumer implements Consumer {
     
     private final TestContext testContext;
-    private final Async async;
+    private final Promise promise;
 
-    public TestConsumer(TestContext testContext, Async async) {
+    public TestConsumer(TestContext testContext, Promise promise) {
       this.testContext = testContext;
-      this.async = async;
+      this.promise = promise;
     }
     
     @Override
@@ -110,7 +113,7 @@ public class RabbitMQClientTest {
     public void handleDelivery(String consumerTag, Envelope envelope, BasicProperties properties, byte[] body) throws IOException {
       logger.info("Message received");
       testContext.assertEquals("Hello", new String(body, StandardCharsets.UTF_8));
-      async.complete();
+      promise.complete();
     }
 
   }
@@ -127,15 +130,23 @@ public class RabbitMQClientTest {
     
     RabbitMQChannel conChan = connection.createChannel();
     RabbitMQChannel pubChan = connection.createChannel();
+    Promise<Void> donePromise = Promise.promise();
     conChan.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)
             .compose(v -> conChan.queueDeclare(queue, true, false, true, null))
             .compose(v -> conChan.queueBind(queue, exchange, "", null))
-            .compose(v -> conChan.basicConsume(queue, new TestConsumer(context, async)))
+            .compose(v -> conChan.basicConsume(queue, true, new TestConsumer(context, donePromise)))
             .compose(v -> pubChan.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null))
             .compose(v -> pubChan.basicPublish(exchange, "", true, new BasicProperties(), "Hello".getBytes(StandardCharsets.UTF_8)))
-            .onFailure(ex -> {
-              logger.info("Failing test: ", ex);
-              context.fail(ex);
+            .compose(v -> donePromise.future())
+            .onComplete(ar -> {
+              if (ar.succeeded()) {
+                connection.close().onComplete(ar2 -> {
+                  async.complete();
+                });
+              } else {
+                logger.info("Failing test: ", ar.cause());
+                context.fail(ar.cause());
+              }
             })
             ;
         
@@ -151,7 +162,7 @@ public class RabbitMQClientTest {
   @Test
   public void testCreateWithServerThatArrivesLate(TestContext context) throws IOException {    
     RabbitMQOptions config = new RabbitMQOptions();
-    config.setReconnectInterval(100);
+    config.setReconnectInterval(1000);
     config.setReconnectAttempts(1000);
     RabbitMQConnectionImpl connection = (RabbitMQConnectionImpl) RabbitMQClient.create(testRunContext.vertx(), config);
 
@@ -165,13 +176,26 @@ public class RabbitMQClientTest {
       container.start();
     });
     RabbitMQChannel channel = connection.createChannel();
+    long start = System.currentTimeMillis();
     Async async = context.async();
     channel.connect()
             .onComplete(ar -> {
               if (ar.succeeded()) {
-                logger.info("Completing test");
+                long end = System.currentTimeMillis();
+                logger.info("Completing test with reconnect count = {} (expected 1 < {} < {})"
+                        , connection.getReconnectCount()
+                        , connection.getReconnectCount()
+                        , (2000 + end - start) / config.getReconnectInterval()
+                );
                 context.assertTrue(connection.getReconnectCount() > 1);
-                async.complete();
+                // Set an upper bound on the reconnect attempts to ensure that it's delaying between attempts.
+                // Allow an extra couple of seconds to avoid race conditions.
+                context.assertTrue(connection.getReconnectCount() < (2000 + end - start) / config.getReconnectInterval());
+                
+                connection.close().onComplete(ar2 -> {
+                  async.complete();
+                  container.stop();
+                });
               } else {
                 logger.info("Failing test");
                 context.fail(ar.cause());
@@ -183,6 +207,7 @@ public class RabbitMQClientTest {
   public RabbitMQOptions config() {
     RabbitMQOptions config = new RabbitMQOptions();
     config.setUri("amqp://" + rabbitmq.getContainerIpAddress() + ":" + rabbitmq.getMappedPort(5672));
+    config.setConnectionName(this.getClass().getSimpleName());
     return config;
   }
 

@@ -15,8 +15,21 @@
  */
 package io.vertx.rabbitmq.impl;
 
-import io.vertx.core.Vertx;
+import com.rabbitmq.client.AMQP;
+import com.rabbitmq.client.Envelope;
+import com.rabbitmq.client.ShutdownSignalException;
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Context;
+import io.vertx.core.Future;
+import io.vertx.core.Handler;
+import io.vertx.core.Promise;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
+import io.vertx.core.streams.impl.InboundBuffer;
 import io.vertx.rabbitmq.RabbitMQConsumer;
+import io.vertx.rabbitmq.RabbitMQConsumerOptions;
+import io.vertx.rabbitmq.RabbitMQMessage;
+import java.io.IOException;
 
 /**
  *
@@ -24,15 +37,197 @@ import io.vertx.rabbitmq.RabbitMQConsumer;
  */
 public class RabbitMQConsumerImpl implements RabbitMQConsumer {
 
-  private final Vertx vertx;
-  private final RabbitMQChannelImpl channel;
+  private static final Logger log = LoggerFactory.getLogger(RabbitMQConsumerImpl.class);
 
-  public RabbitMQConsumerImpl(Vertx vertx, RabbitMQChannelImpl channel) {
-    this.vertx = vertx;
+  private final RabbitMQChannelImpl channel;
+  private final Context vertxContext;
+
+  private Handler<Throwable> exceptionHandler;
+  private Handler<Void> endHandler;
+  private String queueName;  
+  private volatile String consumerTag;
+  private final boolean keepMostRecent;
+  private final InboundBuffer<RabbitMQMessage> pending;
+  private final int maxQueueSize;
+  private volatile boolean cancelled;
+  private boolean shouldReconnect;
+
+  public RabbitMQConsumerImpl(Context vertxContext, RabbitMQChannelImpl channel, String queueName, RabbitMQConsumerOptions options, boolean shouldReconnect) {
     this.channel = channel;
+
+    this.vertxContext = vertxContext;
+    this.keepMostRecent = options.isKeepMostRecent();
+    this.maxQueueSize = options.maxInternalQueueSize();
+    this.pending = new InboundBuffer<>(vertxContext, maxQueueSize);
+    pending.resume();
+    this.queueName = queueName;    
+    this.shouldReconnect = shouldReconnect;
   }
 
+  @Override
+  public String queueName() {
+    return queueName;
+  }
 
-  
+  @Override
+  public RabbitMQConsumer setQueueName(String name) {
+    this.queueName = name;
+    return this;
+  }
+
+  @Override
+  public RabbitMQConsumer exceptionHandler(Handler<Throwable> exceptionHandler) {
+    this.exceptionHandler = exceptionHandler;
+    return this;
+  }
+
+  @Override
+  public RabbitMQConsumer handler(Handler<RabbitMQMessage> handler) {
+    if (handler != null) {
+      pending.handler(msg -> {
+        try {
+          handler.handle(msg);
+        } catch (Exception e) {
+          handleException(e);
+        }
+      });
+    } else {
+      pending.handler(null);
+    }
+    return this;
+  }
+
+  @Override
+  public RabbitMQConsumer pause() {
+    pending.pause();
+    return this;
+  }
+
+  @Override
+  public RabbitMQConsumer resume() {
+    pending.resume();
+    return this;
+  }
+
+  @Override
+  public RabbitMQConsumer fetch(long amount) {
+    pending.fetch(amount);
+    return this;
+  }
+
+  @Override
+  public RabbitMQConsumer endHandler(Handler<Void> endHandler) {
+    this.endHandler = endHandler;
+    return this;
+  }
+
+  @Override
+  public String consumerTag() {
+    return consumerTag;
+  }
+
+  @Override
+  public Future<Void> cancel() {
+    Promise<Void> promise = Promise.promise();
+    cancel(promise);
+    return promise.future();
+  }
+
+  @Override
+  public void cancel(Handler<AsyncResult<Void>> cancelResult) {
+    log.debug("Cancelling " + consumerTag);
+    cancelled = true;
+    channel.basicCancel(consumerTag)
+            .onComplete(ar -> {
+              if (cancelResult != null) {
+                cancelResult.handle(ar);
+              }
+              handleEnd();
+            });
+  }
+
+  @Override
+  public boolean isCancelled() {
+    return cancelled;
+  }
+
+  @Override
+  public boolean isPaused() {
+    return false;
+  }
+
+  /**
+   * Push message to stream.
+   * <p>
+   * Should be called from a vertx thread.
+   *
+   * @param message received message to deliver
+   */
+  private void handleMessage(RabbitMQMessage message) {
+
+    if (pending.size() >= maxQueueSize) {
+      if (keepMostRecent) {
+        pending.read();
+      } else {
+        log.debug("Discard a received message since stream is paused and buffer flag is false");
+        return;
+      }
+    }
+    pending.write(message);
+  }
+
+  /**
+   * Trigger exception handler with given exception
+   */
+  private void handleException(Throwable exception) {
+    if (exceptionHandler != null) {
+      exceptionHandler.handle(exception);
+    }
+  }
+
+  /**
+   * Trigger end of stream handler
+   */
+  void handleEnd() {
+    if (endHandler != null) {
+      endHandler.handle(null);
+    }
+  }
+
+  @Override
+  public void handleConsumeOk(String consumerTag) {
+    log.info("handleConsumeOk " +consumerTag);
+    this.consumerTag = consumerTag;
+  }
+
+  @Override
+  public void handleCancelOk(String consumerTag) {
+    log.info("handleCancelOk " +consumerTag);
+  }
+
+  @Override
+  public void handleCancel(String consumerTag) throws IOException {
+    log.info("handleCancel " +consumerTag);
+  }
+
+  @Override
+  public void handleShutdownSignal(String consumerTag, ShutdownSignalException sig) {    
+    log.info("handleShutdownSignal " +consumerTag);
+    if (shouldReconnect && !cancelled) {
+      channel.basicConsume(queueName, false, this);
+    }
+  }
+
+  @Override
+  public void handleRecoverOk(String consumerTag) {
+    log.info("handleRecoverOk " +consumerTag);
+  }
+
+  @Override
+  public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+    log.info("Got message: " + new String(body));
+    RabbitMQMessage msg = new RabbitMQMessageImpl(body, consumerTag, envelope, properties, null);
+    this.vertxContext.runOnContext(v -> handleMessage(msg));
+  }
   
 }

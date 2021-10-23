@@ -13,7 +13,7 @@ import io.vertx.core.buffer.Buffer;
  */
 @VertxGen
 public interface RabbitMQMessage {
-
+  
   /**
    * @return the message body
    */

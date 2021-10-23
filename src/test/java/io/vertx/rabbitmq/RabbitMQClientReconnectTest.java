@@ -1,0 +1,253 @@
+package io.vertx.rabbitmq;
+
+import com.rabbitmq.client.AMQP.BasicProperties;
+import com.rabbitmq.client.BuiltinExchangeType;
+import io.vertx.core.Future;
+import io.vertx.core.Promise;
+import io.vertx.core.Vertx;
+import io.vertx.core.VertxOptions;
+import io.vertx.core.buffer.Buffer;
+import io.vertx.ext.unit.Async;
+import io.vertx.ext.unit.TestContext;
+import io.vertx.ext.unit.junit.VertxUnitRunner;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
+import org.testcontainers.utility.DockerImageName;
+
+
+@RunWith(VertxUnitRunner.class)
+public class RabbitMQClientReconnectTest {
+  
+  @SuppressWarnings("constantname")
+  private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientReconnectTest.class);
+
+  /**
+   * This test verifies that the RabbitMQ Java client reconnection logic works as long as the vertx reconnect attempts is set to zero.
+   *
+   * The change that makes this work is in the basicConsumer, where the shutdown handler is only set if retries > 0. 
+   * Without that change the vertx client shutdown handler is called, 
+   * interrupting the java client reconnection logic, even though the vertx reconnection won't work because retries is zero.
+   *
+   */
+  private static final String TEST_EXCHANGE = "RabbitMQClientReconnectExchange";
+  private static final String TEST_QUEUE = "RabbitMQClientReconnectQueue";
+  private static final boolean DEFAULT_RABBITMQ_EXCHANGE_DURABLE = false;
+  private static final boolean DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE = true;
+  private static final BuiltinExchangeType DEFAULT_RABBITMQ_EXCHANGE_TYPE = BuiltinExchangeType.FANOUT;
+  private static final boolean DEFAULT_RABBITMQ_QUEUE_DURABLE = false;
+  private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = true;
+  private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = true;
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(RabbitMQClientReconnectTest.class);
+
+  private final Network network;
+  private final GenericContainer networkedRabbitmq;
+  private Proxy proxy;
+  
+  private final Vertx vertx;
+  private RabbitMQConnection connection;
+
+  private final Set<Long> receivedMessages = new HashSet<>();
+  
+  private final Promise<Void> firstMessagesReceived = Promise.promise();
+  private final AtomicBoolean hasShutdown = new AtomicBoolean(false);
+  private final Promise<Void> messageSentAfterShutdown = Promise.promise();
+  private final Promise<Long> allMessagesSent = Promise.promise();
+  private final Promise<Long> allMessagesReceived = Promise.promise();
+  
+  private RabbitMQChannel pubChannel;
+  private RabbitMQPublisher publisher;
+  private RabbitMQChannel conChannel;
+  private RabbitMQConsumer consumer;
+  
+  public RabbitMQClientReconnectTest() throws IOException {
+    LOGGER.info("Constructing");
+    this.network = Network.newNetwork();
+    this.networkedRabbitmq = new GenericContainer(DockerImageName.parse("rabbitmq:3.8.6-alpine"))
+            .withExposedPorts(5672)
+            .withNetwork(network);
+    this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
+  }
+
+  private RabbitMQOptions getRabbitMQOptions() {
+    RabbitMQOptions options = new RabbitMQOptions();
+
+    options.setHost("localhost");
+    options.setPort(proxy.getProxyPort());
+    options.setConnectionTimeout(1000);
+    options.setNetworkRecoveryInterval(1000);
+    options.setRequestedHeartbeat(1);
+    options.setConnectionName(this.getClass().getSimpleName());
+    // Disable Java RabbitMQ client library reconnections
+    options.setAutomaticRecoveryEnabled(false);
+    // Enable vertx RabbitMQClient reconnections
+    options.setReconnectAttempts(Integer.MAX_VALUE);
+    return options;
+  }
+  
+  @Before
+  public void setup() throws Exception {
+    LOGGER.info("Starting");
+    this.networkedRabbitmq.start();
+    this.proxy = new Proxy(vertx, this.networkedRabbitmq.getMappedPort(5672));
+    this.proxy.startProxy();
+    this.connection = RabbitMQClient.create(vertx, getRabbitMQOptions());
+  }
+
+  @After
+  public void shutdown() {
+    this.networkedRabbitmq.stop();
+    this.proxy.stopProxy();
+    LOGGER.info("Shutdown");
+  }
+
+  @Test(timeout = 1 * 60 * 1000L)
+  public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
+    Vertx vertx = Vertx.vertx();
+    
+    Async async = ctx.async();
+    
+    createAndStartConsumer(vertx);
+    createAndStartProducer(vertx);
+    
+    // Have to react to allMessagesSent completing in case it completes after the last message is received.
+    allMessagesSent.future().onSuccess(count -> {
+      synchronized(receivedMessages) {
+        if (receivedMessages.size() == count) {
+          allMessagesReceived.tryComplete();
+        }
+      }
+    });
+    
+    firstMessagesReceived.future()
+            .compose(v -> breakConnection())
+            .compose(v -> messageSentAfterShutdown.future())
+            .compose(v -> reestablishConnection())
+            .compose(v -> allMessagesSent.future())
+            .compose(v -> allMessagesReceived.future())
+            .compose(v -> {
+              return publisher.stop();
+                    })
+            .compose(v -> {
+              return pubChannel.close();
+                    })
+            .compose(v -> {
+              return consumer.cancel();
+                    })
+            .compose(v -> {
+              return conChannel.close();
+                    })
+            .compose(v -> {
+              return connection.close();
+                    })
+            .onComplete(ar -> {
+              if (ar.succeeded()) {
+                async.complete();
+              } else {
+                ctx.fail(ar.cause());
+              }
+            })
+            ;
+
+  }
+
+  private void createAndStartProducer(Vertx vertx) {
+    pubChannel = connection.createChannel();
+   
+    pubChannel.addChannelEstablishedCallback(p -> {
+      pubChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
+              .onComplete(p);
+    });
+    publisher = pubChannel.createPublisher(TEST_EXCHANGE, new RabbitMQPublisherOptions());
+    AtomicLong counter = new AtomicLong();
+    AtomicLong postShutdownCount = new AtomicLong(20);
+    AtomicLong timerId = new AtomicLong();
+    
+    /*
+    Send a message every second, with the message being a strictly increasing integer.
+    After sending the first message when 'hasShutdown' is set complete the messageSentAfterShutdown to notify the main test.
+    Then continue to send a further postShutdownCount messages, before cancelling the periodic timer and completing allMessagesSent with the total count of messages sent.
+    */
+    timerId.set(vertx.setPeriodic(1000, v -> {
+      long value = counter.incrementAndGet();
+      logger.info("Publishing message {}", value);
+      publisher.publish("", new BasicProperties(), Buffer.buffer(Long.toString(value)));
+      if (hasShutdown.get()) {
+        messageSentAfterShutdown.tryComplete();
+        if (postShutdownCount.decrementAndGet() == 0) {
+          vertx.cancelTimer(timerId.get());
+          allMessagesSent.complete(counter.get());
+        }
+      }
+    }));
+  }
+
+  private void createAndStartConsumer(Vertx vertx) {
+    conChannel = connection.createChannel();
+   
+    conChannel.addChannelEstablishedCallback(p -> {
+      conChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
+              .compose(v -> conChannel.queueDeclare(TEST_QUEUE, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))
+              .compose(v -> conChannel.queueBind(TEST_QUEUE, TEST_EXCHANGE, "", null))
+              .onComplete(p);
+    });
+    conChannel.addChannelShutdownHandler(sse -> {
+      hasShutdown.set(true);
+    });
+    
+    consumer = conChannel.createConsumer(TEST_QUEUE, new RabbitMQConsumerOptions());
+    consumer.handler(message -> {
+      Long index = Long.parseLong(message.body().toString(StandardCharsets.UTF_8));
+      synchronized(receivedMessages) {
+        receivedMessages.add(index);
+        if (receivedMessages.size() > 5) {
+          firstMessagesReceived.tryComplete();
+        }
+        logger.info("Received message: {} (have {})", index, receivedMessages.size());
+        Future<Long> allMessagesSentFuture = allMessagesSent.future();
+        if (allMessagesSentFuture.isComplete() && (receivedMessages.size() == allMessagesSentFuture.result())) {
+          allMessagesReceived.tryComplete();
+        }
+      }
+      conChannel.basicAck(message.consumerTag(), message.envelope().getDeliveryTag(), false);
+    });
+    conChannel.basicConsume(TEST_QUEUE, false, consumer)
+            .onComplete(ar -> { logger.info("Consumer started: {}", ar ); })
+            ;
+  }
+
+  private Future<Void> breakConnection() {
+    return vertx.executeBlocking(promise -> {
+      logger.info("Blocking proxy");
+      proxy.stopProxy();
+      logger.info("Blocked proxy");
+      promise.complete();      
+    });
+  }
+  
+  private Future<Void> reestablishConnection() {
+    return vertx.executeBlocking(promise -> {
+      logger.info("Unblocking proxy");
+      try {
+        proxy.startProxy();
+      } catch(Exception ex) {
+        logger.error("Failed to restart proxy");
+      }
+      logger.info("Unblocked proxy");
+      promise.complete();      
+    });
+  }
+  
+}

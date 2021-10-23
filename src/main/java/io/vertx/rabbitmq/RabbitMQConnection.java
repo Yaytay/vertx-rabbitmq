@@ -21,11 +21,21 @@ import io.vertx.core.Future;
  *
  * @author jtalbut
  */
-public interface RabbitMQConnection extends AutoCloseable {
+public interface RabbitMQConnection {
   
   RabbitMQChannel createChannel();
   
+  /**
+   * Returns a strictly increasing identifier of the underlying connection (essentially a number that is incremented each time the connection is reconnected).
+   * @return an identifier of the underlying connection.
+   */
+  long getConnectionInstance();
+  
+  String getConnectionName();
+  
   Future<Void> abort(int closeCode, String closeMessage, int timeout);
+  
+  Future<Void> close();
   
   Future<Void> close(int closeCode, String closeMessage, int timeout);
   

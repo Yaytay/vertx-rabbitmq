@@ -1,5 +1,6 @@
 package io.vertx.rabbitmq;
 
+import com.rabbitmq.client.Consumer;
 import io.vertx.codegen.annotations.Fluent;
 import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
@@ -11,7 +12,7 @@ import io.vertx.core.streams.ReadStream;
  * A stream of messages from a rabbitmq queue.
  */
 @VertxGen
-public interface RabbitMQConsumer extends ReadStream<RabbitMQMessage> {
+public interface RabbitMQConsumer extends ReadStream<RabbitMQMessage>, Consumer {
   
   /**
    * Set an exception handler on the read stream.
@@ -50,7 +51,7 @@ public interface RabbitMQConsumer extends ReadStream<RabbitMQMessage> {
   RabbitMQConsumer resume();
 
   /**
-   * Set an end handler. Once the stream has canceled successfully, the handler will be called.
+   * Set an end handler. Once the stream has cancelled successfully, the handler will be called.
    *
    * @return a reference to this, so the API can be used fluently
    */
