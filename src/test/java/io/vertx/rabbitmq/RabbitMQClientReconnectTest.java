@@ -41,14 +41,14 @@ public class RabbitMQClientReconnectTest {
    * interrupting the java client reconnection logic, even though the vertx reconnection won't work because retries is zero.
    *
    */
-  private static final String TEST_EXCHANGE = "RabbitMQClientReconnectExchange";
-  private static final String TEST_QUEUE = "RabbitMQClientReconnectQueue";
-  private static final boolean DEFAULT_RABBITMQ_EXCHANGE_DURABLE = false;
-  private static final boolean DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE = true;
+  private static final String TEST_EXCHANGE = "RabbitMQClientBuiltinReconnectExchange";
+  private static final String TEST_QUEUE = "RabbitMQClientBuiltinReconnectQueue";
+  private static final boolean DEFAULT_RABBITMQ_EXCHANGE_DURABLE = true;
+  private static final boolean DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE = false;
   private static final BuiltinExchangeType DEFAULT_RABBITMQ_EXCHANGE_TYPE = BuiltinExchangeType.FANOUT;
-  private static final boolean DEFAULT_RABBITMQ_QUEUE_DURABLE = false;
-  private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = true;
-  private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = true;
+  private static final boolean DEFAULT_RABBITMQ_QUEUE_DURABLE = true;
+  private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = false;
+  private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = false;
 
   private static final Logger LOGGER = LoggerFactory.getLogger(RabbitMQClientReconnectTest.class);
 
@@ -75,7 +75,7 @@ public class RabbitMQClientReconnectTest {
   public RabbitMQClientReconnectTest() throws IOException {
     LOGGER.info("Constructing");
     this.network = Network.newNetwork();
-    this.networkedRabbitmq = new GenericContainer(DockerImageName.parse("rabbitmq:3.8.6-alpine"))
+    this.networkedRabbitmq = new GenericContainer(DockerImageName.parse("rabbitmq:3.9.8-management-alpine"))
             .withExposedPorts(5672)
             .withNetwork(network);
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
@@ -115,8 +115,6 @@ public class RabbitMQClientReconnectTest {
 
   @Test(timeout = 1 * 60 * 1000L)
   public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
-    Vertx vertx = Vertx.vertx();
-    
     Async async = ctx.async();
     
     createAndStartConsumer(vertx, ctx);
@@ -137,21 +135,11 @@ public class RabbitMQClientReconnectTest {
             .compose(v -> reestablishConnection())
             .compose(v -> allMessagesSent.future())
             .compose(v -> allMessagesReceived.future())
-            .compose(v -> {
-              return publisher.stop();
-                    })
-            .compose(v -> {
-              return pubChannel.close();
-                    })
-            .compose(v -> {
-              return consumer.cancel();
-                    })
-            .compose(v -> {
-              return conChannel.close();
-                    })
-            .compose(v -> {
-              return connection.close();
-                    })
+            .compose(v -> publisher.stop())
+            .compose(v -> pubChannel.close())
+            .compose(v -> consumer.cancel())
+            .compose(v -> conChannel.close())
+            .compose(v -> connection.close())
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 async.complete();
@@ -195,8 +183,8 @@ public class RabbitMQClientReconnectTest {
   }
 
   private void createAndStartConsumer(Vertx vertx, TestContext ctx) {
+    
     conChannel = connection.createChannel();
-   
     conChannel.addChannelEstablishedCallback(p -> {
       conChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
               .compose(v -> conChannel.queueDeclare(TEST_QUEUE, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))

@@ -33,12 +33,7 @@ public class RabbitMQClientDisconnectTest {
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientDisconnectTest.class);
 
   /**
-   * This test verifies that the RabbitMQ Java client reconnection logic works as long as the vertx reconnect attempts is set to zero.
-   *
-   * The change that makes this work is in the basicConsumer, where the shutdown handler is only set if retries > 0. 
-   * Without that change the vertx client shutdown handler is called, 
-   * interrupting the java client reconnection logic, even though the vertx reconnection won't work because retries is zero.
-   *
+   * This test just does a clean start/stop of rabbitmq to check that there are no spurious errors logged.
    */
   private static final String TEST_EXCHANGE = "RabbitMQClientDisconnectExchange";
   private static final String TEST_QUEUE = "RabbitMQClientDisconnectQueue";
@@ -71,7 +66,7 @@ public class RabbitMQClientDisconnectTest {
   public RabbitMQClientDisconnectTest() throws IOException {
     LOGGER.info("Constructing");
     this.network = Network.newNetwork();
-    this.networkedRabbitmq = new GenericContainer(DockerImageName.parse("rabbitmq:3.8.6-alpine"))
+    this.networkedRabbitmq = new GenericContainer(DockerImageName.parse("rabbitmq:3.9.8-management-alpine"))
             .withExposedPorts(5672)
             .withNetwork(network);
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
@@ -111,8 +106,6 @@ public class RabbitMQClientDisconnectTest {
 
   @Test(timeout = 1 * 60 * 1000L)
   public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
-    Vertx vertx = Vertx.vertx();
-    
     Async async = ctx.async();
     
     createAndStartConsumer(vertx, ctx);

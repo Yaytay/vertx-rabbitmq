@@ -28,7 +28,7 @@ import org.testcontainers.utility.DockerImageName;
 
 
 @RunWith(VertxUnitRunner.class)
-public class RabbitMQClientBuiltinReconnectTest {
+public class RabbitMQClientBuiltinRecoveryTest {
   
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientReconnectTest.class);
@@ -70,10 +70,10 @@ public class RabbitMQClientBuiltinReconnectTest {
   private RabbitMQChannel conChannel;
   private RabbitMQConsumer consumer;
   
-  public RabbitMQClientBuiltinReconnectTest() throws IOException {
+  public RabbitMQClientBuiltinRecoveryTest() throws IOException {
     LOGGER.info("Constructing");
     this.network = Network.newNetwork();
-    this.networkedRabbitmq = new GenericContainer(DockerImageName.parse("rabbitmq:3.8.6-alpine"))
+    this.networkedRabbitmq = new GenericContainer(DockerImageName.parse("rabbitmq:3.9.8-management-alpine"))
             .withExposedPorts(5672)
             .withNetwork(network);
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
@@ -113,8 +113,6 @@ public class RabbitMQClientBuiltinReconnectTest {
 
   @Test(timeout = 1 * 60 * 1000L)
   public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
-    Vertx vertx = Vertx.vertx();
-    
     Async async = ctx.async();
     
     createAndStartConsumer(vertx, ctx);
@@ -139,9 +137,7 @@ public class RabbitMQClientBuiltinReconnectTest {
             .compose(v -> pubChannel.close())
             .compose(v -> consumer.cancel())
             .compose(v -> conChannel.close())
-            .compose(v -> {
-              return connection.close();
-                    })
+            .compose(v -> connection.close())
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 async.complete();

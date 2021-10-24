@@ -51,7 +51,7 @@ public class RabbitMQClientTest {
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientTest.class);
   
   @ClassRule
-  public static final GenericContainer rabbitmq = new GenericContainer("rabbitmq:3.7-management")
+  public static final GenericContainer rabbitmq = new GenericContainer("rabbitmq:3.9.8-management-alpine")
     .withExposedPorts(5672, 15672);
   
   @Rule
@@ -167,7 +167,7 @@ public class RabbitMQClientTest {
     RabbitMQConnectionImpl connection = (RabbitMQConnectionImpl) RabbitMQClient.create(testRunContext.vertx(), config);
 
     int port = findOpenPort();    
-    GenericContainer container = new FixedHostPortGenericContainer("rabbitmq:3.7-management")
+    GenericContainer container = new FixedHostPortGenericContainer("rabbitmq:3.9.8-management-alpine")            
             .withFixedExposedPort(port, 5672)
             ;
     config.setUri("amqp://" + container.getContainerIpAddress() + ":" + port);

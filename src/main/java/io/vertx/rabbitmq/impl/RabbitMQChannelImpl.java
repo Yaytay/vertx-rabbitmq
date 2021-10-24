@@ -150,6 +150,10 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   @Override
   public Future<Void> connect() {
     
+    if (channel != null && channel.isOpen()) {
+      return Future.succeededFuture();
+    }
+    
     Promise<Void> result = Promise.promise();
     connection.openChannel(this.knownConnectionInstance)
             .onComplete(ar -> {
@@ -272,7 +276,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     
     return onChannel(() -> {
       return channel.basicConsume(queue, autoAck, consumerTag, noLocal, exclusive, arguments, consumer);
-    }).mapEmpty();
+    });
     
   }
 

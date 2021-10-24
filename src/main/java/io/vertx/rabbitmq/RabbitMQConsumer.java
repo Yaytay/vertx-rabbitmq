@@ -19,6 +19,8 @@ public interface RabbitMQConsumer extends ReadStream<RabbitMQMessage> {
    * The RabbitMQConsumer mandates the values used for many of the arguments to basicConsume, with the exception of exclusive and arguments.
    * 
    * consume can only be called once for a given instance.
+   * Furthermore only one RabbitMQConsumer can be used per RabbitMQChannel (because the channelId is used as the consumerTag).
+   * It would be possible to work around this, but it would involve tracking a lot of extra state and channels are cheap.
    * 
    * @param exclusive true if this is an exclusive consumer.
    * See <a href="https://www.rabbitmq.com/consumers.html#exclusivity">https://www.rabbitmq.com/consumers.html#exclusivity</a>.
