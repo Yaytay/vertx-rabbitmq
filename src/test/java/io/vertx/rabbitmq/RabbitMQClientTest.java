@@ -134,7 +134,7 @@ public class RabbitMQClientTest {
     conChan.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)
             .compose(v -> conChan.queueDeclare(queue, true, false, true, null))
             .compose(v -> conChan.queueBind(queue, exchange, "", null))
-            .compose(v -> conChan.basicConsume(queue, true, new TestConsumer(context, donePromise)))
+            .compose(v -> conChan.basicConsume(queue, true, getClass().getSimpleName(), false, false, null, new TestConsumer(context, donePromise)))
             .compose(v -> pubChan.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null))
             .compose(v -> pubChan.basicPublish(exchange, "", true, new BasicProperties(), "Hello".getBytes(StandardCharsets.UTF_8)))
             .compose(v -> donePromise.future())

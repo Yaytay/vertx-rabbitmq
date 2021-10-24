@@ -266,13 +266,12 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     });
     
   }
-
   
   @Override
-  public Future<Void> basicConsume(String queue, boolean autoAck, Consumer consumer) {
+  public Future<String> basicConsume(String queue, boolean autoAck, String consumerTag, boolean noLocal, boolean exclusive, Map<String, Object> arguments, Consumer consumer) {
     
     return onChannel(() -> {
-      return channel.basicConsume(queue, autoAck, channelId, consumer);
+      return channel.basicConsume(queue, autoAck, consumerTag, noLocal, exclusive, arguments, consumer);
     }).mapEmpty();
     
   }

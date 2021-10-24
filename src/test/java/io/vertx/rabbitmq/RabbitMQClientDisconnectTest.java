@@ -115,7 +115,7 @@ public class RabbitMQClientDisconnectTest {
     
     Async async = ctx.async();
     
-    createAndStartConsumer(vertx);
+    createAndStartConsumer(vertx, ctx);
     createAndStartProducer(vertx);
     
     // Have to react to allMessagesSent completing in case it completes after the last message is received.
@@ -173,7 +173,7 @@ public class RabbitMQClientDisconnectTest {
     }));
   }
 
-  private void createAndStartConsumer(Vertx vertx) {
+  private void createAndStartConsumer(Vertx vertx, TestContext ctx) {
     conChannel = connection.createChannel();
    
     conChannel.addChannelEstablishedCallback(p -> {
@@ -195,8 +195,13 @@ public class RabbitMQClientDisconnectTest {
         }
       }
     });
-    conChannel.basicConsume(TEST_QUEUE, false, consumer)
-            .onComplete(ar -> { logger.info("Consumer started: {}", ar ); })
+    consumer.consume(false, null)
+            .onComplete(ar -> { 
+              if (ar.failed()) {
+                ctx.fail(ar.cause());
+              } else {
+                logger.info("Consumer started: {}", ar );
+              } })
             ;
   }
   

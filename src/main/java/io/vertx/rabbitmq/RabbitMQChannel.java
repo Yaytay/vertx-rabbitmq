@@ -119,7 +119,32 @@ public interface RabbitMQChannel {
   
   Future<Void> basicCancel(String consumerTag);
   
-  Future<Void> basicConsume(String queue, boolean autoAck, Consumer consumer);
+    /**
+     * Start a consumer. 
+     * 
+     * @param queue the name of the queue
+     * @param autoAck true if the server should consider messages acknowledged once delivered; false if the server should expect explicit acknowledgements.
+     * Auto acknowledgements should only be used when "at-most-once" semantics are required, it cannot guarantee delivery.
+     * @param consumerTag a client-generated consumer tag to establish context
+     * It is strongly recommended that this be set to a globally unique value as it is needed for tracking of acks.
+     * Setting it to a user-understandable value will help when looking at queue consumers in the RabbitMQ management UI.
+     * @param noLocal True if the server should not deliver to this consumer
+     * messages published on this channel's connection. Note that the RabbitMQ server does not support this flag.
+     * Set to false, unless you are using something other than RabbitMQ.
+     * @param exclusive true if this is an exclusive consumer.
+     * See <a href="https://www.rabbitmq.com/consumers.html#exclusivity">https://www.rabbitmq.com/consumers.html#exclusivity</a>.
+     * It is recommended that this be set to false
+     * , be sure you understand the implications and have read 
+     * <a href="https://www.rabbitmq.com/consumers.html#single-active-consumer">https://www.rabbitmq.com/consumers.html#single-active-consumer</a> before setting to true.
+     * @param arguments a set of arguments for the consume
+     * Set to null unless there is a good reason not to.
+     * @param consumer an interface to the consumer object
+     * @return A Future containing either the consumerTag associated with the new consumer or a failure.
+     * @see com.rabbitmq.client.Channel.basicConsume
+     * @see com.rabbitmq.client.AMQP.Basic.Consume
+     * @see com.rabbitmq.client.AMQP.Basic.ConsumeOk
+     */
+  Future<String> basicConsume(String queue, boolean autoAck, String consumerTag, boolean noLocal, boolean exclusive, Map<String, Object> arguments, Consumer consumer);
   
   Future<Void> basicQos(int prefetchSize, int prefetchCount, boolean global);
   

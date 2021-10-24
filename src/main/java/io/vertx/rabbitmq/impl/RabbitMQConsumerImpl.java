@@ -16,6 +16,7 @@
 package io.vertx.rabbitmq.impl;
 
 import com.rabbitmq.client.AMQP;
+import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.ShutdownSignalException;
 import io.vertx.core.AsyncResult;
@@ -30,6 +31,8 @@ import io.vertx.rabbitmq.RabbitMQConsumer;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQMessage;
 import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  *
@@ -50,7 +53,10 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
   private final InboundBuffer<RabbitMQMessage> pending;
   private final int maxQueueSize;
   private volatile boolean cancelled;
-  private boolean shouldReconnect;
+  private final boolean shouldReconnect;
+  private boolean exclusive;
+  private AtomicLong consumeCount = new AtomicLong();
+  private Map<String, Object> arguments;
 
   public RabbitMQConsumerImpl(Context vertxContext, RabbitMQChannelImpl channel, String queueName, RabbitMQConsumerOptions options, boolean shouldReconnect) {
     this.channel = channel;
@@ -63,7 +69,61 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
     this.queueName = queueName;    
     this.shouldReconnect = shouldReconnect;
   }
+  
+  private class ConsumerBridge implements Consumer {
+    
+    @Override
+    public void handleConsumeOk(String tag) {
+      log.info("handleConsumeOk " + tag);
+      consumerTag = tag;
+    }
 
+    @Override
+    public void handleCancelOk(String tag) {
+      log.info("handleCancelOk " +tag);
+    }
+
+    @Override
+    public void handleCancel(String tag) throws IOException {
+      log.info("handleCancel " +tag);
+    }
+
+    @Override
+    public void handleShutdownSignal(String tag, ShutdownSignalException sig) {    
+      log.info("handleShutdownSignal " +tag);
+      if (shouldReconnect && !cancelled) {
+        long count = consumeCount.incrementAndGet();
+        channel.basicConsume(queueName, false, channel.getChannelId(), false, exclusive, arguments, new ConsumerBridge());
+      }
+    }
+
+    @Override
+    public void handleRecoverOk(String tag) {
+      log.info("handleRecoverOk " +tag);
+    }
+
+    @Override
+    public void handleDelivery(String tag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+      log.info("Got message: " + new String(body));
+      RabbitMQMessage msg = new RabbitMQMessageImpl(body, tag, envelope, properties, null);
+      vertxContext.runOnContext(v -> handleMessage(msg));
+    }    
+  }
+
+  @Override
+  public Future<String> consume(boolean exclusive, Map<String, Object> arguments) {
+    if (!consumeCount.compareAndSet(0, 1)) {
+      throw new IllegalStateException("consume has already been called");
+    }
+    this.exclusive = exclusive;
+    this.arguments = arguments;
+    return channel.connect()
+            .compose(v -> {
+              return channel.basicConsume(queueName, false, channel.getChannelId(), false, exclusive, arguments, new ConsumerBridge());
+            })
+            ;
+  }
+  
   @Override
   public String queueName() {
     return queueName;
@@ -194,40 +254,4 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
     }
   }
 
-  @Override
-  public void handleConsumeOk(String consumerTag) {
-    log.info("handleConsumeOk " +consumerTag);
-    this.consumerTag = consumerTag;
-  }
-
-  @Override
-  public void handleCancelOk(String consumerTag) {
-    log.info("handleCancelOk " +consumerTag);
-  }
-
-  @Override
-  public void handleCancel(String consumerTag) throws IOException {
-    log.info("handleCancel " +consumerTag);
-  }
-
-  @Override
-  public void handleShutdownSignal(String consumerTag, ShutdownSignalException sig) {    
-    log.info("handleShutdownSignal " +consumerTag);
-    if (shouldReconnect && !cancelled) {
-      channel.basicConsume(queueName, false, this);
-    }
-  }
-
-  @Override
-  public void handleRecoverOk(String consumerTag) {
-    log.info("handleRecoverOk " +consumerTag);
-  }
-
-  @Override
-  public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
-    log.info("Got message: " + new String(body));
-    RabbitMQMessage msg = new RabbitMQMessageImpl(body, consumerTag, envelope, properties, null);
-    this.vertxContext.runOnContext(v -> handleMessage(msg));
-  }
-  
 }

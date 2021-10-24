@@ -1,18 +1,35 @@
 package io.vertx.rabbitmq;
 
-import com.rabbitmq.client.Consumer;
 import io.vertx.codegen.annotations.Fluent;
 import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.streams.ReadStream;
+import java.util.Map;
 
 /**
  * A stream of messages from a rabbitmq queue.
  */
 @VertxGen
-public interface RabbitMQConsumer extends ReadStream<RabbitMQMessage>, Consumer {
+public interface RabbitMQConsumer extends ReadStream<RabbitMQMessage> {
+
+  /**
+   * Begin consuming from the queue.
+   * The RabbitMQConsumer mandates the values used for many of the arguments to basicConsume, with the exception of exclusive and arguments.
+   * 
+   * consume can only be called once for a given instance.
+   * 
+   * @param exclusive true if this is an exclusive consumer.
+   * See <a href="https://www.rabbitmq.com/consumers.html#exclusivity">https://www.rabbitmq.com/consumers.html#exclusivity</a>.
+   * It is recommended that this be set to false
+   * , be sure you understand the implications and have read 
+   * <a href="https://www.rabbitmq.com/consumers.html#single-active-consumer">https://www.rabbitmq.com/consumers.html#single-active-consumer</a> before setting to true.
+   * @param arguments a set of arguments for the consume
+   * Set to null unless there is a good reason not to.
+   * @return A Future containing either the consumerTag associated with the new consumer or a failure.
+   */
+  Future<String> consume(boolean exclusive, Map<String, Object> arguments);
   
   /**
    * Set an exception handler on the read stream.
