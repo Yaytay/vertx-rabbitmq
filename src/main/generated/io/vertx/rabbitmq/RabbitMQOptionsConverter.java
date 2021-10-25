@@ -31,6 +31,26 @@ public class RabbitMQOptionsConverter {
             obj.setAutomaticRecoveryEnabled((Boolean)member.getValue());
           }
           break;
+        case "channelRpcTimeout":
+          if (member.getValue() instanceof Number) {
+            obj.setChannelRpcTimeout(((Number)member.getValue()).intValue());
+          }
+          break;
+        case "channelShouldCheckRpcResponseType":
+          if (member.getValue() instanceof Boolean) {
+            obj.setChannelShouldCheckRpcResponseType((Boolean)member.getValue());
+          }
+          break;
+        case "clientProperties":
+          if (member.getValue() instanceof JsonObject) {
+            java.util.Map<String, java.lang.Object> map = new java.util.LinkedHashMap<>();
+            ((Iterable<java.util.Map.Entry<String, Object>>)member.getValue()).forEach(entry -> {
+              if (entry.getValue() instanceof Object)
+                map.put(entry.getKey(), entry.getValue());
+            });
+            obj.setClientProperties(map);
+          }
+          break;
         case "connectTimeout":
           if (member.getValue() instanceof Number) {
             obj.setConnectTimeout(((Number)member.getValue()).intValue());
@@ -103,11 +123,6 @@ public class RabbitMQOptionsConverter {
         case "idleTimeoutUnit":
           if (member.getValue() instanceof String) {
             obj.setIdleTimeoutUnit(java.util.concurrent.TimeUnit.valueOf((String)member.getValue()));
-          }
-          break;
-        case "includeProperties":
-          if (member.getValue() instanceof Boolean) {
-            obj.setIncludeProperties((Boolean)member.getValue());
           }
           break;
         case "jdkSslEngineOptions":
@@ -222,6 +237,11 @@ public class RabbitMQOptionsConverter {
             obj.setRequestedChannelMax(((Number)member.getValue()).intValue());
           }
           break;
+        case "requestedFrameMax":
+          if (member.getValue() instanceof Number) {
+            obj.setRequestedFrameMax(((Number)member.getValue()).intValue());
+          }
+          break;
         case "requestedHeartbeat":
           if (member.getValue() instanceof Number) {
             obj.setRequestedHeartbeat(((Number)member.getValue()).intValue());
@@ -240,6 +260,11 @@ public class RabbitMQOptionsConverter {
         case "sendBufferSize":
           if (member.getValue() instanceof Number) {
             obj.setSendBufferSize(((Number)member.getValue()).intValue());
+          }
+          break;
+        case "shutdownTimeout":
+          if (member.getValue() instanceof Number) {
+            obj.setShutdownTimeout(((Number)member.getValue()).intValue());
           }
           break;
         case "soLinger":
@@ -287,6 +312,11 @@ public class RabbitMQOptionsConverter {
             obj.setTcpQuickAck((Boolean)member.getValue());
           }
           break;
+        case "topologyRecoveryEnabled":
+          if (member.getValue() instanceof Boolean) {
+            obj.setTopologyRecoveryEnabled((Boolean)member.getValue());
+          }
+          break;
         case "trafficClass":
           if (member.getValue() instanceof Number) {
             obj.setTrafficClass(((Number)member.getValue()).intValue());
@@ -322,6 +352,11 @@ public class RabbitMQOptionsConverter {
             obj.setVirtualHost((String)member.getValue());
           }
           break;
+        case "workPoolTimeout":
+          if (member.getValue() instanceof Number) {
+            obj.setWorkPoolTimeout(((Number)member.getValue()).intValue());
+          }
+          break;
         case "writeIdleTimeout":
           if (member.getValue() instanceof Number) {
             obj.setWriteIdleTimeout(((Number)member.getValue()).intValue());
@@ -342,6 +377,13 @@ public class RabbitMQOptionsConverter {
       json.put("applicationLayerProtocols", array);
     }
     json.put("automaticRecoveryEnabled", obj.isAutomaticRecoveryEnabled());
+    json.put("channelRpcTimeout", obj.getChannelRpcTimeout());
+    json.put("channelShouldCheckRpcResponseType", obj.isChannelShouldCheckRpcResponseType());
+    if (obj.getClientProperties() != null) {
+      JsonObject map = new JsonObject();
+      obj.getClientProperties().forEach((key, value) -> map.put(key, value));
+      json.put("clientProperties", map);
+    }
     json.put("connectTimeout", obj.getConnectTimeout());
     if (obj.getConnectionName() != null) {
       json.put("connectionName", obj.getConnectionName());
@@ -378,7 +420,6 @@ public class RabbitMQOptionsConverter {
     if (obj.getIdleTimeoutUnit() != null) {
       json.put("idleTimeoutUnit", obj.getIdleTimeoutUnit().name());
     }
-    json.put("includeProperties", obj.getIncludeProperties());
     if (obj.getJdkSslEngineOptions() != null) {
       json.put("jdkSslEngineOptions", obj.getJdkSslEngineOptions().toJson());
     }
@@ -427,10 +468,12 @@ public class RabbitMQOptionsConverter {
     json.put("reconnectInterval", obj.getReconnectInterval());
     json.put("reconnectOnInitialConnection", obj.isReconnectOnInitialConnection());
     json.put("requestedChannelMax", obj.getRequestedChannelMax());
+    json.put("requestedFrameMax", obj.getRequestedFrameMax());
     json.put("requestedHeartbeat", obj.getRequestedHeartbeat());
     json.put("reuseAddress", obj.isReuseAddress());
     json.put("reusePort", obj.isReusePort());
     json.put("sendBufferSize", obj.getSendBufferSize());
+    json.put("shutdownTimeout", obj.getShutdownTimeout());
     json.put("soLinger", obj.getSoLinger());
     json.put("ssl", obj.isSsl());
     json.put("sslHandshakeTimeout", obj.getSslHandshakeTimeout());
@@ -442,6 +485,9 @@ public class RabbitMQOptionsConverter {
     json.put("tcpKeepAlive", obj.isTcpKeepAlive());
     json.put("tcpNoDelay", obj.isTcpNoDelay());
     json.put("tcpQuickAck", obj.isTcpQuickAck());
+    if (obj.getTopologyRecoveryEnabled() != null) {
+      json.put("topologyRecoveryEnabled", obj.getTopologyRecoveryEnabled());
+    }
     json.put("trafficClass", obj.getTrafficClass());
     json.put("trustAll", obj.isTrustAll());
     if (obj.getTrustStoreOptions() != null) {
@@ -457,6 +503,7 @@ public class RabbitMQOptionsConverter {
     if (obj.getVirtualHost() != null) {
       json.put("virtualHost", obj.getVirtualHost());
     }
+    json.put("workPoolTimeout", obj.getWorkPoolTimeout());
     json.put("writeIdleTimeout", obj.getWriteIdleTimeout());
   }
 }

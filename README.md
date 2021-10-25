@@ -16,22 +16,8 @@ Please see the main documentation on the web-site for a full description:
 
 # Running the tests
 
-By default the tests uses a cloud provided RabbitMQ instance.
+The tests all use a instances of rabbit dynamically created in a local docker instance (i.e. the user running the tests must have permission to create docker containers).
 
 ```
 % mvn test
-```
-
-You can run tests with a local RabbitMQ instance:
-
-```
-% mvn test -Prabbitmq.local
-```
-
-You will need to have RabbitMQ running with default ports on localhost for this to work.
-
-You can setup a RabbitMQ instance with Docker:
-
-```
-docker run --rm --name vertx-rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq
 ```

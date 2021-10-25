@@ -6,6 +6,22 @@ import java.util.List;
 
 import com.rabbitmq.client.Address;
 import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.ExceptionHandler;
+import com.rabbitmq.client.MetricsCollector;
+import com.rabbitmq.client.RecoveryDelayHandler;
+import com.rabbitmq.client.SaslConfig;
+import com.rabbitmq.client.ShutdownSignalException;
+import com.rabbitmq.client.SocketConfigurator;
+import com.rabbitmq.client.SslContextFactory;
+import com.rabbitmq.client.TrafficListener;
+import com.rabbitmq.client.impl.AMQConnection;
+import com.rabbitmq.client.impl.CredentialsProvider;
+import com.rabbitmq.client.impl.CredentialsRefreshService;
+import com.rabbitmq.client.impl.ErrorOnWriteListener;
+import com.rabbitmq.client.impl.nio.NioParams;
+import com.rabbitmq.client.impl.recovery.RecoveredQueueNameSupplier;
+import com.rabbitmq.client.impl.recovery.RetryHandler;
+import com.rabbitmq.client.impl.recovery.TopologyRecoveryFilter;
 
 import io.vertx.codegen.annotations.DataObject;
 import io.vertx.core.json.JsonObject;
@@ -16,6 +32,12 @@ import io.vertx.core.net.PemKeyCertOptions;
 import io.vertx.core.net.PemTrustOptions;
 import io.vertx.core.net.PfxOptions;
 import io.vertx.core.net.TrustOptions;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.function.Predicate;
+import javax.net.SocketFactory;
 
 /**
  * RabbitMQ client options, most
@@ -26,75 +48,101 @@ import io.vertx.core.net.TrustOptions;
 public class RabbitMQOptions extends NetClientOptions {
 
   /**
-   * The default port = {@code - 1} - {@code 5671} for SSL otherwise {@code 5672}
+   * The default port = {@code - 1} - {@code 5671} for SSL otherwise {@code 5672}.
    */
   public static final int DEFAULT_PORT = -1;
 
   /**
-   * The default host = {@code localhost}
+   * The default host = {@code localhost}.
    */
   public static final String DEFAULT_HOST = ConnectionFactory.DEFAULT_HOST;
 
   /**
-   * The default user = {@code guest}
+   * The default user = {@code guest}.
    */
   public static final String DEFAULT_USER = ConnectionFactory.DEFAULT_USER;
 
   /**
-   * The default password = {@code guest}
+   * The default password = {@code guest}.
    */
   public static final String DEFAULT_PASSWORD = ConnectionFactory.DEFAULT_PASS;
 
   /**
-   * The default virtual host = {@code /}
+   * The default virtual host = {@code /}.
    */
   public static final String DEFAULT_VIRTUAL_HOST = ConnectionFactory.DEFAULT_VHOST;
 
   /**
-   * The default connection timeout = {@code 60000}
+   * The default connection timeout = {@code 60000}.
    */
   public static final int DEFAULT_CONNECTION_TIMEOUT = ConnectionFactory.DEFAULT_CONNECTION_TIMEOUT;
+  
+  /**
+   * The default shutdown timeout = {@code 10000}.
+   */
+  public static final int DEFAULT_SHUTDOWN_TIMEOUT = ConnectionFactory.DEFAULT_SHUTDOWN_TIMEOUT;
 
   /**
-   * The default connection timeout = {@code 60}
+   * The default work pool timeout = {@code -1}.
+   */
+  public static final int DEFAULT_WORK_POOL_TIMEOUT = ConnectionFactory.DEFAULT_WORK_POOL_TIMEOUT;
+
+  /**
+   * The default heartbeat delay = {@code 60}.
    */
   public static final int DEFAULT_REQUESTED_HEARTBEAT = ConnectionFactory.DEFAULT_HEARTBEAT;
 
   /**
-   * The default handshake timeout = {@code 10000}
+   * The default handshake timeout = {@code 10000}.
    */
   public static final int DEFAULT_HANDSHAKE_TIMEOUT = ConnectionFactory.DEFAULT_HANDSHAKE_TIMEOUT;
 
   /**
-   * The default requested channel max = {@code 0}
+   * The default maximum channel number = {@code 2047}.
    */
   public static final int DEFAULT_REQUESTED_CHANNEL_MAX = ConnectionFactory.DEFAULT_CHANNEL_MAX;
 
   /**
-   * The default network recovery internal = {@code 5000}
+   * The default maximum frame size = {@code 0}.
+   */
+  public static final int DEFAULT_REQUESTED_FRAME_MAX = ConnectionFactory.DEFAULT_FRAME_MAX;
+
+  /**
+   * The default network recovery internal = {@code 5000}.
    */
   public static final long DEFAULT_NETWORK_RECOVERY_INTERNAL = 5000L;
 
   /**
-   * The default automatic recovery enabled = {@code false}
+   * The default automatic recovery enabled = {@code false}.
    */
   public static final boolean DEFAULT_AUTOMATIC_RECOVERY_ENABLED = false;
 
   /**
-   * The default reconnect on initial connection = {@code true}
+   * The default reconnect on initial connection = {@code true}.
    */
   public static final boolean DEFAULT_RECONNECT_ON_INITIAL_CONNECTION = true;
 
   /**
-   * The default connection retry delay = {@code 10000}
+   * The default connection retry delay = {@code 10000}.
    */
   public static final long DEFAULT_RECONNECT_INTERVAL = 10000L;
 
   /**
-   * The default connection name = {@code VertxRabbitMQ}
+   * The default connection name = {@code VertxRabbitMQ}.
+   * It is strongly recommended that all clients change this to something more identifying.
    */
   public static final String DEFAULT_CONNECTION_NAME = "VertxRabbitMQ";
 
+  /**
+   * The default RPC timeout value = {@code 10 minutes}.
+   */
+  public static final int DEFAULT_CHANNEL_RPC_TIMEOUT = ConnectionFactory.DEFAULT_CHANNEL_RPC_TIMEOUT;
+  
+  /**
+   * The default value for whether or not channels check the reply type of an RPC call = {@code false}.
+   */
+  public static final boolean DEFAULT_CHANNEL_SHOULD_CHECK_RPC_RESPONSE_TYPE = false;
+  
   private String uri = null;
   private List<Address> addresses = Collections.emptyList();
   private String user;
@@ -106,16 +154,44 @@ public class RabbitMQOptions extends NetClientOptions {
   private int requestedHeartbeat;
   private int handshakeTimeout;
   private int requestedChannelMax;
+  private int requestedFrameMax;
+  private int shutdownTimeout;
+  private int workPoolTimeout;
   
-  // These two control the java RabbitMQ client automatic recovery
+  private int channelRpcTimeout;
+  private boolean channelShouldCheckRpcResponseType;
+  
+  // These three control the java RabbitMQ client automatic recovery
   private boolean automaticRecoveryEnabled;
+  private Boolean topologyRecoveryEnabled;
   private long networkRecoveryInterval;
   
   // This (and reconnectAttempts, reconnectInterval from NetClientOptions) control the reconnects implented in this library
   private boolean reconnectOnInitialConnection;
   
-  private boolean includeProperties;
   private String connectionName;
+  private Map<String, Object> clientProperties;
+  private Predicate<ShutdownSignalException> connectionRecoveryTriggeringCondition;
+  private CredentialsProvider credentialsProvider;
+  private CredentialsRefreshService credentialsRefreshService;
+  private ErrorOnWriteListener errorOnWriteListener;
+  private ExceptionHandler exceptionHandler;
+  private ScheduledExecutorService heartbeatExecutor;
+  private MetricsCollector metricsCollector;
+  private NioParams nioParams;
+  private RecoveredQueueNameSupplier recoveredQueueNameSupplier;
+  private RecoveryDelayHandler recoveryDelayHandler;
+  private SaslConfig saslConfig;
+  private ExecutorService sharedExecutor;
+  private ExecutorService shutdownExecutor;
+  private SocketConfigurator socketConfigurator;
+  private SocketFactory socketFactory;
+  private SslContextFactory sslContextFactory;
+  private ThreadFactory threadFactory;
+  private ExecutorService topologyRecoveryExecutor;
+  private TopologyRecoveryFilter topologyRecoveryFilter;
+  private RetryHandler topologyRecoveryRetryHandler;
+  private TrafficListener trafficListener;
 
   public RabbitMQOptions() {
     super();
@@ -139,14 +215,42 @@ public class RabbitMQOptions extends NetClientOptions {
     this.virtualHost = other.virtualHost;
     this.port = other.port;
     this.connectionTimeout = other.connectionTimeout;
+    this.shutdownTimeout = other.shutdownTimeout;
+    this.workPoolTimeout = other.workPoolTimeout;
     this.requestedHeartbeat = other.requestedHeartbeat;
     this.handshakeTimeout = other.handshakeTimeout;
     this.networkRecoveryInterval = other.networkRecoveryInterval;
     this.automaticRecoveryEnabled = other.automaticRecoveryEnabled;
+    this.topologyRecoveryEnabled = other.topologyRecoveryEnabled;
     this.reconnectOnInitialConnection = other.reconnectOnInitialConnection;
-    this.includeProperties = other.includeProperties;
     this.requestedChannelMax = other.requestedChannelMax;
+    this.requestedFrameMax = other.requestedFrameMax;
     this.connectionName = other.connectionName;
+    
+    this.channelRpcTimeout = other.channelRpcTimeout;
+    this.channelShouldCheckRpcResponseType = other.channelShouldCheckRpcResponseType;
+    this.clientProperties = other.clientProperties;
+    this.connectionRecoveryTriggeringCondition = other.connectionRecoveryTriggeringCondition;
+    this.credentialsProvider = other.credentialsProvider;
+    this.credentialsRefreshService = other.credentialsRefreshService;
+    this.errorOnWriteListener = other.errorOnWriteListener;
+    this.exceptionHandler = other.exceptionHandler;
+    this.heartbeatExecutor = other.heartbeatExecutor;
+    this.metricsCollector = other.metricsCollector;
+    this.nioParams = other.nioParams;
+    this.recoveredQueueNameSupplier = other.recoveredQueueNameSupplier;
+    this.recoveryDelayHandler = other.recoveryDelayHandler;
+    this.saslConfig = other.saslConfig;
+    this.sharedExecutor = other.sharedExecutor;
+    this.shutdownExecutor = other.shutdownExecutor;
+    this.socketConfigurator = other.socketConfigurator;
+    this.socketFactory = other.socketFactory;
+    this.sslContextFactory = other.sslContextFactory;    
+    this.threadFactory = other.threadFactory;
+    this.topologyRecoveryExecutor = other.topologyRecoveryExecutor;
+    this.topologyRecoveryFilter = other.topologyRecoveryFilter;
+    this.topologyRecoveryRetryHandler = other.topologyRecoveryRetryHandler;
+    this.trafficListener = other.trafficListener;
   }
 
   private void init() {
@@ -158,14 +262,21 @@ public class RabbitMQOptions extends NetClientOptions {
     this.virtualHost = DEFAULT_VIRTUAL_HOST;
     this.port = DEFAULT_PORT;
     this.connectionTimeout = DEFAULT_CONNECTION_TIMEOUT;
+    this.shutdownTimeout = DEFAULT_SHUTDOWN_TIMEOUT;
+    this.workPoolTimeout = DEFAULT_WORK_POOL_TIMEOUT;
     this.requestedHeartbeat = DEFAULT_REQUESTED_HEARTBEAT;
     this.handshakeTimeout = DEFAULT_HANDSHAKE_TIMEOUT;
     this.requestedChannelMax = DEFAULT_REQUESTED_CHANNEL_MAX;
+    this.requestedFrameMax = DEFAULT_REQUESTED_FRAME_MAX;
     this.networkRecoveryInterval = DEFAULT_NETWORK_RECOVERY_INTERNAL;
     this.automaticRecoveryEnabled = DEFAULT_AUTOMATIC_RECOVERY_ENABLED;
+    this.topologyRecoveryEnabled = null;
     this.reconnectOnInitialConnection = DEFAULT_RECONNECT_ON_INITIAL_CONNECTION;
-    this.includeProperties = false;
     this.connectionName = DEFAULT_CONNECTION_NAME;
+    
+    this.channelRpcTimeout = DEFAULT_CHANNEL_RPC_TIMEOUT;
+    this.channelShouldCheckRpcResponseType = DEFAULT_CHANNEL_SHOULD_CHECK_RPC_RESPONSE_TYPE;
+    this.clientProperties = AMQConnection.defaultClientProperties();
   }
 
 
@@ -184,10 +295,19 @@ public class RabbitMQOptions extends NetClientOptions {
     return this;
   }
 
+  /**
+   * Get the fields host, port, username, password and virtual host in a single URI.
+   * @return a single URI containing the fields host, port, username, password and virtual host.
+   */
   public String getUri() {
     return uri;
   }
 
+  /**
+   * Set the fields host, port, username, password and virtual host in a single URI.
+   * @param uri The AMQP URI.
+   * @return a reference to this, so the API can be used fluently
+   */
   public RabbitMQOptions setUri(String uri) {
     this.uri = uri;
     return this;
@@ -414,24 +534,6 @@ public class RabbitMQOptions extends NetClientOptions {
   }
   
   /**
-   * @return wether to include properties when a broker message is passed on the event bus
-   */
-  public boolean getIncludeProperties() {
-    return includeProperties;
-  }
-
-  /**
-   * Set wether to include properties when a broker message is passed on the event bus
-   *
-   * @param includeProperties wether to include properties
-   * @return a reference to this, so the API can be used fluently
-   */
-  public RabbitMQOptions setIncludeProperties(boolean includeProperties) {
-    this.includeProperties = includeProperties;
-    return this;
-  }
-
-  /**
    * @return {@code true} if NIO Sockets are enabled, {@code false} otherwise
    */
   public boolean isNioEnabled() {
@@ -511,5 +613,229 @@ public class RabbitMQOptions extends NetClientOptions {
   public RabbitMQOptions setConnectionName(String connectionName) {
     this.connectionName = connectionName;
     return this;
+  }
+
+  public int getChannelRpcTimeout() {
+    return channelRpcTimeout;
+  }
+
+  public void setChannelRpcTimeout(int channelRpcTimeout) {
+    this.channelRpcTimeout = channelRpcTimeout;
+  }
+
+  public boolean isChannelShouldCheckRpcResponseType() {
+    return channelShouldCheckRpcResponseType;
+  }
+
+  public void setChannelShouldCheckRpcResponseType(boolean channelShouldCheckRpcResponseType) {
+    this.channelShouldCheckRpcResponseType = channelShouldCheckRpcResponseType;
+  }
+
+  public Map<String, Object> getClientProperties() {
+    return clientProperties;
+  }
+
+  public void setClientProperties(Map<String, Object> clientProperties) {
+    this.clientProperties = clientProperties;
+  }
+
+  public Predicate<ShutdownSignalException> getConnectionRecoveryTriggeringCondition() {
+    return connectionRecoveryTriggeringCondition;
+  }
+
+  public void setConnectionRecoveryTriggeringCondition(Predicate<ShutdownSignalException> connectionRecoveryTriggeringCondition) {
+    this.connectionRecoveryTriggeringCondition = connectionRecoveryTriggeringCondition;
+  }
+
+  public CredentialsProvider getCredentialsProvider() {
+    return credentialsProvider;
+  }
+
+  public void setCredentialsProvider(CredentialsProvider credentialsProvider) {
+    this.credentialsProvider = credentialsProvider;
+  }
+
+  public CredentialsRefreshService getCredentialsRefreshService() {
+    return credentialsRefreshService;
+  }
+
+  public void setCredentialsRefreshService(CredentialsRefreshService credentialsRefreshService) {
+    this.credentialsRefreshService = credentialsRefreshService;
+  }
+
+  public ErrorOnWriteListener getErrorOnWriteListener() {
+    return errorOnWriteListener;
+  }
+
+  public void setErrorOnWriteListener(ErrorOnWriteListener errorOnWriteListener) {
+    this.errorOnWriteListener = errorOnWriteListener;
+  }
+
+  public ExceptionHandler getExceptionHandler() {
+    return exceptionHandler;
+  }
+
+  public void setExceptionHandler(ExceptionHandler exceptionHandler) {
+    this.exceptionHandler = exceptionHandler;
+  }
+
+  public ScheduledExecutorService getHeartbeatExecutor() {
+    return heartbeatExecutor;
+  }
+
+  public void setHeartbeatExecutor(ScheduledExecutorService heartbeatExecutor) {
+    this.heartbeatExecutor = heartbeatExecutor;
+  }
+
+  public MetricsCollector getMetricsCollector() {
+    return metricsCollector;
+  }
+
+  public void setMetricsCollector(MetricsCollector metricsCollector) {
+    this.metricsCollector = metricsCollector;
+  }
+
+  public NioParams getNioParams() {
+    return nioParams;
+  }
+
+  public void setNioParams(NioParams nioParams) {
+    this.nioParams = nioParams;
+  }
+
+  public int getRequestedFrameMax() {
+    return requestedFrameMax;
+  }
+
+  public void setRequestedFrameMax(int requestedFrameMax) {
+    this.requestedFrameMax = requestedFrameMax;
+  }
+
+  public RecoveredQueueNameSupplier getRecoveredQueueNameSupplier() {
+    return recoveredQueueNameSupplier;
+  }
+
+  public void setRecoveredQueueNameSupplier(RecoveredQueueNameSupplier recoveredQueueNameSupplier) {
+    this.recoveredQueueNameSupplier = recoveredQueueNameSupplier;
+  }
+
+  public RecoveryDelayHandler getRecoveryDelayHandler() {
+    return recoveryDelayHandler;
+  }
+
+  public void setRecoveryDelayHandler(RecoveryDelayHandler recoveryDelayHandler) {
+    this.recoveryDelayHandler = recoveryDelayHandler;
+  }
+
+  public int getShutdownTimeout() {
+    return shutdownTimeout;
+  }
+
+  public void setShutdownTimeout(int shutdownTimeout) {
+    this.shutdownTimeout = shutdownTimeout;
+  }
+
+  public SaslConfig getSaslConfig() {
+    return saslConfig;
+  }
+
+  public void setSaslConfig(SaslConfig saslConfig) {
+    this.saslConfig = saslConfig;
+  }
+
+  public ExecutorService getSharedExecutor() {
+    return sharedExecutor;
+  }
+
+  public void setSharedExecutor(ExecutorService sharedExecutor) {
+    this.sharedExecutor = sharedExecutor;
+  }
+
+  public ExecutorService getShutdownExecutor() {
+    return shutdownExecutor;
+  }
+
+  public void setShutdownExecutor(ExecutorService shutdownExecutor) {
+    this.shutdownExecutor = shutdownExecutor;
+  }
+
+  public SocketConfigurator getSocketConfigurator() {
+    return socketConfigurator;
+  }
+
+  public void setSocketConfigurator(SocketConfigurator socketConfigurator) {
+    this.socketConfigurator = socketConfigurator;
+  }
+
+  public SocketFactory getSocketFactory() {
+    return socketFactory;
+  }
+
+  public void setSocketFactory(SocketFactory socketFactory) {
+    this.socketFactory = socketFactory;
+  }
+
+  public SslContextFactory getSslContextFactory() {
+    return sslContextFactory;
+  }
+
+  public void setSslContextFactory(SslContextFactory sslContextFactory) {
+    this.sslContextFactory = sslContextFactory;
+  }
+
+  public Boolean getTopologyRecoveryEnabled() {
+    return topologyRecoveryEnabled;
+  }
+
+  public void setTopologyRecoveryEnabled(Boolean topologyRecoveryEnabled) {
+    this.topologyRecoveryEnabled = topologyRecoveryEnabled;
+  }
+
+  public ThreadFactory getThreadFactory() {
+    return threadFactory;
+  }
+
+  public void setThreadFactory(ThreadFactory threadFactory) {
+    this.threadFactory = threadFactory;
+  }
+
+  public ExecutorService getTopologyRecoveryExecutor() {
+    return topologyRecoveryExecutor;
+  }
+
+  public void setTopologyRecoveryExecutor(ExecutorService topologyRecoveryExecutor) {
+    this.topologyRecoveryExecutor = topologyRecoveryExecutor;
+  }
+
+  public TopologyRecoveryFilter getTopologyRecoveryFilter() {
+    return topologyRecoveryFilter;
+  }
+
+  public void setTopologyRecoveryFilter(TopologyRecoveryFilter topologyRecoveryFilter) {
+    this.topologyRecoveryFilter = topologyRecoveryFilter;
+  }
+
+  public RetryHandler getTopologyRecoveryRetryHandler() {
+    return topologyRecoveryRetryHandler;
+  }
+
+  public void setTopologyRecoveryRetryHandler(RetryHandler topologyRecoveryRetryHandler) {
+    this.topologyRecoveryRetryHandler = topologyRecoveryRetryHandler;
+  }
+
+  public TrafficListener getTrafficListener() {
+    return trafficListener;
+  }
+
+  public void setTrafficListener(TrafficListener trafficListener) {
+    this.trafficListener = trafficListener;
+  }
+
+  public int getWorkPoolTimeout() {
+    return workPoolTimeout;
+  }
+
+  public void setWorkPoolTimeout(int workPoolTimeout) {
+    this.workPoolTimeout = workPoolTimeout;
   }
 }

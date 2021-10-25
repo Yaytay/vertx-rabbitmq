@@ -33,8 +33,6 @@ public interface RabbitMQConnection {
   
   String getConnectionName();
   
-  Future<Void> abort(int closeCode, String closeMessage, int timeout);
-  
   Future<Void> close();
   
   Future<Void> close(int closeCode, String closeMessage, int timeout);
