@@ -246,21 +246,6 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
 
   private void configureSslProtocol(ConnectionFactory cf) {
     //The RabbitMQ Client connection needs a JDK SSLContext, so force this setting.
-//    config.setSslEngineOptions(new JdkSSLEngineOptions());
-//    config.getEnabledSecureTransportProtocols();
-//    config.setSsl(true);
-//    // config.addEnabledSecureTransportProtocol("TLSv1.3");
-//    SSLHelper sslHelper = new SSLHelper(config, config.getKeyCertOptions(), config.getTrustOptions());
-//    JdkSslContext ctx = (JdkSslContext) sslHelper.getContext((VertxInternal) vertx);
-//    NioParams nioParams = config.getNioParams();
-//    if (nioParams == null) {
-//      nioParams = new NioParams();
-//    }
-//    nioParams.setSslEngineConfigurator(sslEngine -> {
-//      sslEngine.setUseClientMode(true);
-//    });
-//    config.setNioParams(nioParams);
-//    cf.useSslProtocol(ctx.context());
   }
 
   @Override

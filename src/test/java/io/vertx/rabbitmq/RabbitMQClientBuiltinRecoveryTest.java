@@ -166,7 +166,7 @@ public class RabbitMQClientBuiltinRecoveryTest {
     After sending the first message when 'hasShutdown' is set complete the messageSentAfterShutdown to notify the main test.
     Then continue to send a further postShutdownCount messages, before cancelling the periodic timer and completing allMessagesSent with the total count of messages sent.
     */
-    timerId.set(vertx.setPeriodic(1000, v -> {
+    timerId.set(vertx.setPeriodic(200, v -> {
       long value = counter.incrementAndGet();
       logger.info("Publishing message {}", value);
       publisher.publish("", new BasicProperties(), Buffer.buffer(Long.toString(value)));
