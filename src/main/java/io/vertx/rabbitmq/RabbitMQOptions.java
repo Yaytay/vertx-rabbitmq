@@ -195,7 +195,7 @@ public class RabbitMQOptions extends NetClientOptions {
 
   public RabbitMQOptions() {
     super();
-    setReconnectInterval(DEFAULT_RECONNECT_INTERVAL);
+    super.setReconnectInterval(DEFAULT_RECONNECT_INTERVAL);
     init();
   }
 
@@ -280,6 +280,10 @@ public class RabbitMQOptions extends NetClientOptions {
   }
 
 
+  /**
+   * Get multiple addresses for cluster mode.
+   * @return addresses of AMQP cluster.
+   */
   public List<Address> getAddresses() {
     return Collections.unmodifiableList(addresses);
   }
@@ -519,10 +523,13 @@ public class RabbitMQOptions extends NetClientOptions {
    * Enable or disable reconnection, as implemented in this library, on initial connections.
    * 
    * If reconnections are enabled it will, by default, make multiple attempts to connect on startup.
-   * This can cause problems with the configuration is wrong, and it is this bad configuration that is preventing connection.
+   * This can cause problems if the configuration is wrong, and it is this bad configuration that is preventing connection.
    * To work around this reconnectOnInitialConnection can be set to false (it defaults to true).
    * When reconnectOnInitialConnection is false (and reconnectAttempts > 0) reconnection attempts will not be made until
    * after the first connection has been successful.
+   * 
+   * Attempting to reconnect on the initial connection is particularly beneficial when running in a dynamic environment in
+   * which the target RabbitMQ server may not be up at the time of the initial connection.
    * 
    * @param reconnectOnInitialConnection if {@code false}, prevents automatic recovery on the first connection attempts.
    * @return a reference to this, so the API can be used fluently
@@ -534,30 +541,52 @@ public class RabbitMQOptions extends NetClientOptions {
   }
   
   /**
-   * @return {@code true} if NIO Sockets are enabled, {@code false} otherwise
+   * @return {@code true} because NIO Sockets are always enabled
    */
   public boolean isNioEnabled() {
     return true;
   }
 
+  /**
+   * Set the value of reconnect attempts
+   *
+   * @param attempts  the maximum number of reconnect attempts
+   * @return a reference to this, so the API can be used fluently
+   */
   @Override
   public RabbitMQOptions setReconnectAttempts(int attempts) {
     super.setReconnectAttempts(attempts);
     return this;
   }
 
+  /**
+   * Get the time (in ms) between attempts to reconnect.
+   * @param interval the time (in ms) between attempts to reconnect.
+   * @return a reference to this, so the API can be used fluently
+   */
   @Override
   public RabbitMQOptions setReconnectInterval(long interval) {
     super.setReconnectInterval(interval);
     return this;
   }
 
+  /**
+   * Set to true if the connection should connect using ssl.
+   * This does not need to be called explicitly if an AMQPS URL is used.
+   * @param ssl true if the connection should connect using ssl.
+   * @return a reference to this, so the API can be used fluently
+   */
   @Override
   public RabbitMQOptions setSsl(boolean ssl) {
     super.setSsl(ssl);
     return this;
   }
 
+  /**
+   * 
+   * @param trustAll
+   * @return 
+   */
   @Override
   public RabbitMQOptions setTrustAll(boolean trustAll) {
     super.setTrustAll(trustAll);

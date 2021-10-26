@@ -22,14 +22,10 @@ import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.ShutdownListener;
 import com.rabbitmq.client.ShutdownSignalException;
-import io.netty.handler.ssl.JdkSslContext;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
-import io.vertx.core.impl.VertxInternal;
-import io.vertx.core.net.JdkSSLEngineOptions;
-import io.vertx.core.net.impl.SSLHelper;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQOptions;
@@ -102,10 +98,10 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     if (uriString != null) {      
       try {
         URI uri = new URI(uriString);
+        cf.setUri(uri);
         if ("amqps".equals(uri.getScheme())) {
           configureSslProtocol(cf);
         }
-        cf.setUri(uri);
       } catch (Exception e) {
         throw new IllegalArgumentException("Invalid rabbitmq connection uri ", e);
       }
@@ -250,10 +246,21 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
 
   private void configureSslProtocol(ConnectionFactory cf) {
     //The RabbitMQ Client connection needs a JDK SSLContext, so force this setting.
-    config.setSslEngineOptions(new JdkSSLEngineOptions());
-    SSLHelper sslHelper = new SSLHelper(config, config.getKeyCertOptions(), config.getTrustOptions());
-    JdkSslContext ctx = (JdkSslContext) sslHelper.getContext((VertxInternal) vertx);
-    cf.useSslProtocol(ctx.context());
+//    config.setSslEngineOptions(new JdkSSLEngineOptions());
+//    config.getEnabledSecureTransportProtocols();
+//    config.setSsl(true);
+//    // config.addEnabledSecureTransportProtocol("TLSv1.3");
+//    SSLHelper sslHelper = new SSLHelper(config, config.getKeyCertOptions(), config.getTrustOptions());
+//    JdkSslContext ctx = (JdkSslContext) sslHelper.getContext((VertxInternal) vertx);
+//    NioParams nioParams = config.getNioParams();
+//    if (nioParams == null) {
+//      nioParams = new NioParams();
+//    }
+//    nioParams.setSslEngineConfigurator(sslEngine -> {
+//      sslEngine.setUseClientMode(true);
+//    });
+//    config.setNioParams(nioParams);
+//    cf.useSslProtocol(ctx.context());
   }
 
   @Override
