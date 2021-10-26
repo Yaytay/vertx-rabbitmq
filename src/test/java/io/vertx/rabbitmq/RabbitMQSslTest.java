@@ -19,10 +19,13 @@ import com.rabbitmq.client.BuiltinExchangeType;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
+import io.vertx.core.net.JksOptions;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.RunTestOnContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
@@ -85,7 +88,7 @@ public class RabbitMQSslTest {
   }
   
   @Test
-  public void testCreateWithWorkingServer(TestContext context) {
+  public void testCreateWithInsecureServer(TestContext context) {
     RabbitMQOptions config = config();
     RabbitMQConnection connection = RabbitMQClient.create(testRunContext.vertx(), config);
 
@@ -103,6 +106,24 @@ public class RabbitMQSslTest {
               } else {
                 logger.info("Failing test");
                 context.fail(ar.cause());
+              }
+            });
+  }
+  
+  @Test
+  public void testCreateWithSecureServer(TestContext context) throws KeyStoreException, NoSuchAlgorithmException {
+    RabbitMQOptions config = config();
+    config.setKeyStoreOptions(new JksOptions());
+    RabbitMQConnection connection = RabbitMQClient.create(testRunContext.vertx(), config);
+
+    RabbitMQChannel channel = connection.createChannel();
+    Async async = context.async();
+    channel.connect()
+            .onComplete(ar -> {
+              if (ar.succeeded()) {
+                context.fail("Expected to fail");
+              } else {
+                async.complete();                     
               }
             });
   }

@@ -34,8 +34,10 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -90,7 +92,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     return connectionName;
   }
   
-  private Connection rawConnect() throws IOException, TimeoutException {
+  private Connection rawConnect() throws Exception {
     List<Address> addresses = null;
     ConnectionFactory cf = new ConnectionFactory();
     String uriString = config.getUri();
@@ -244,8 +246,15 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     return conn;
   }
 
-  private void configureSslProtocol(ConnectionFactory cf) {
-    //The RabbitMQ Client connection needs a JDK SSLContext, so force this setting.
+  private void configureSslProtocol(ConnectionFactory cf) throws Exception {
+    cf.useSslProtocol();
+    if (config.getKeyStoreOptions() != null) {
+      KeyManagerFactory kmf = config.getKeyStoreOptions().getKeyManagerFactory(vertx);
+      TrustManagerFactory tmf = config.getKeyStoreOptions().getTrustManagerFactory(vertx);
+      SSLContext sslContext = SSLContext.getInstance("TLSv1.3");
+      sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);      
+      cf.useSslProtocol(sslContext);
+    }
   }
 
   @Override
