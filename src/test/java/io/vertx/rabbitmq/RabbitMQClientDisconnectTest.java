@@ -23,7 +23,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
-import org.testcontainers.utility.DockerImageName;
 
 
 @RunWith(VertxUnitRunner.class)
@@ -65,10 +64,8 @@ public class RabbitMQClientDisconnectTest {
   
   public RabbitMQClientDisconnectTest() throws IOException {
     LOGGER.info("Constructing");
-    this.network = Network.newNetwork();
-    this.networkedRabbitmq = new GenericContainer(DockerImageName.parse("rabbitmq:3.9.8-management-alpine"))
-            .withExposedPorts(5672)
-            .withNetwork(network);
+    this.network = RabbitMQBrokerProvider.getNetwork();
+    this.networkedRabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
   }
 
@@ -90,8 +87,6 @@ public class RabbitMQClientDisconnectTest {
   
   @Before
   public void setup() throws Exception {
-    LOGGER.info("Starting");
-    this.networkedRabbitmq.start();
     this.proxy = new Proxy(vertx, this.networkedRabbitmq.getMappedPort(5672));
     this.proxy.startProxy();
     this.connection = RabbitMQClient.create(vertx, getRabbitMQOptions());
@@ -99,9 +94,7 @@ public class RabbitMQClientDisconnectTest {
 
   @After
   public void shutdown() {
-    this.networkedRabbitmq.stop();
     this.proxy.stopProxy();
-    LOGGER.info("Shutdown");
   }
 
   @Test(timeout = 1 * 60 * 1000L)

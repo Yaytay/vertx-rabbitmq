@@ -46,6 +46,12 @@ public class RabbitMQPublisherOptions {
     maxInternalQueueSize = that.maxInternalQueueSize;
   }
 
+  public JsonObject toJson() {
+    JsonObject json = new JsonObject();
+    RabbitMQPublisherOptionsConverter.toJson(this, json);
+    return json;
+  }
+  
   /**
    * @return the number of reconnect attempts
    */

@@ -9,7 +9,6 @@ import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -17,7 +16,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
-import org.testcontainers.utility.DockerImageName;
 
 
 @RunWith(VertxUnitRunner.class)
@@ -51,10 +49,8 @@ public class RabbitMQConsumerTwiceTest {
   
   public RabbitMQConsumerTwiceTest() throws IOException {
     LOGGER.info("Constructing");
-    this.network = Network.newNetwork();
-    this.networkedRabbitmq = new GenericContainer(DockerImageName.parse("rabbitmq:3.9.8-management-alpine"))
-            .withExposedPorts(5672)
-            .withNetwork(network);
+    this.network = RabbitMQBrokerProvider.getNetwork();
+    this.networkedRabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
   }
 
@@ -76,15 +72,7 @@ public class RabbitMQConsumerTwiceTest {
   
   @Before
   public void setup() throws Exception {
-    LOGGER.info("Starting");
-    this.networkedRabbitmq.start();
     this.connection = RabbitMQClient.create(vertx, getRabbitMQOptions());
-  }
-
-  @After
-  public void shutdown() {
-    this.networkedRabbitmq.stop();
-    LOGGER.info("Shutdown");
   }
 
   @Test(timeout = 1 * 60 * 1000L)

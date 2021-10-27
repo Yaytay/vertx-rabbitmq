@@ -33,7 +33,6 @@ import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.utility.MountableFile;
 
 import static org.junit.Assert.assertNotNull;
 
@@ -50,12 +49,7 @@ public class RabbitMQSslTest {
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQSslTest.class);
   
   @ClassRule
-  public static final GenericContainer rabbitmq = new GenericContainer("rabbitmq:3.9.8-management-alpine")
-          .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/rabbitmq.conf"), "/etc/rabbitmq/rabbitmq.conf")
-          .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/ca/ca_certificate.pem"), "/etc/rabbitmq/ca_certificate.pem")
-          .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/server/server_certificate.pem"), "/etc/rabbitmq/server_certificate.pem")
-          .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/server/private_key.pem"), "/etc/rabbitmq/server_key.pem")
-          .withExposedPorts(5671, 5672, 15672);
+  public static final GenericContainer rabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
   
   @Rule
   public RunTestOnContext testRunContext = new RunTestOnContext();

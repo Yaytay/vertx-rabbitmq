@@ -263,16 +263,18 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   }
   
   protected boolean shouldRetryConnection() {
-    if ((config.getReconnectInterval() > 0) 
-            && ((config.getReconnectAttempts() < 0) || config.getReconnectAttempts() > reconnectCount)
-            && (connectedAtLeastOnce || config.isReconnectOnInitialConnection())
-            && !closed
-            ) {
-      ++reconnectCount;
-      return true;
-    } else {
-      return false;
+    if ((config.getReconnectInterval() > 0) && !closed) {
+      if (connectedAtLeastOnce) {
+        if (((config.getReconnectAttempts() < 0) || config.getReconnectAttempts() > reconnectCount)) {
+          ++reconnectCount;
+          return true;
+        }
+      } else if ((config.getInitialConnectAttempts() < 0) || config.getInitialConnectAttempts() > reconnectCount) {
+        ++reconnectCount;
+        return true;
+      }        
     }
+    return false;
   }
   
   private void connectBlocking(Promise<Connection> promise) {

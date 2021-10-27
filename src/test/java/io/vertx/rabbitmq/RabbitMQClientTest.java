@@ -51,8 +51,7 @@ public class RabbitMQClientTest {
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientTest.class);
   
   @ClassRule
-  public static final GenericContainer rabbitmq = new GenericContainer("rabbitmq:3.9.8-management-alpine")
-    .withExposedPorts(5672, 15672);
+  public static final GenericContainer rabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
   
   @Rule
   public RunTestOnContext testRunContext = new RunTestOnContext();
@@ -162,12 +161,12 @@ public class RabbitMQClientTest {
   @Test
   public void testCreateWithServerThatArrivesLate(TestContext context) throws IOException {    
     RabbitMQOptions config = new RabbitMQOptions();
-    config.setReconnectInterval(1000);
-    config.setReconnectAttempts(1000);
+    config.setReconnectInterval(500);
+    config.setInitialConnectAttempts(20);
     RabbitMQConnectionImpl connection = (RabbitMQConnectionImpl) RabbitMQClient.create(testRunContext.vertx(), config);
 
     int port = findOpenPort();    
-    GenericContainer container = new FixedHostPortGenericContainer("rabbitmq:3.9.8-management-alpine")            
+    GenericContainer container = new FixedHostPortGenericContainer(RabbitMQBrokerProvider.IMAGE_NAME)
             .withFixedExposedPort(port, 5672)
             ;
     config.setUri("amqp://" + container.getContainerIpAddress() + ":" + port);

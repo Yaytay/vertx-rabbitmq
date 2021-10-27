@@ -46,5 +46,6 @@ public class RabbitMQConsumerOptionsConverter {
   public static void toJson(RabbitMQConsumerOptions obj, java.util.Map<String, Object> json) {
     json.put("autoAck", obj.isAutoAck());
     json.put("keepMostRecent", obj.isKeepMostRecent());
+    json.put("maxInternalQueueSize", obj.getMaxInternalQueueSize());
   }
 }

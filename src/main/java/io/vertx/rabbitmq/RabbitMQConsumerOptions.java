@@ -27,6 +27,12 @@ public class RabbitMQConsumerOptions {
     RabbitMQConsumerOptionsConverter.fromJson(json, this);
   }
 
+  public JsonObject toJson() {
+    JsonObject json = new JsonObject();
+    RabbitMQConsumerOptionsConverter.toJson(this, json);
+    return json;
+  }
+  
   /**
    * @param autoAck true if the server should consider messages
    *                acknowledged once delivered; false if the server should expect
@@ -67,7 +73,7 @@ public class RabbitMQConsumerOptions {
   /**
    * @return the size of internal queue
    */
-  public int maxInternalQueueSize() {
+  public int getMaxInternalQueueSize() {
     return maxInternalQueueSize;
   }
 

@@ -129,6 +129,11 @@ public class RabbitMQOptionsConverter {
             obj.setIdleTimeoutUnit(java.util.concurrent.TimeUnit.valueOf((String)member.getValue()));
           }
           break;
+        case "initialConnectAttempts":
+          if (member.getValue() instanceof Number) {
+            obj.setInitialConnectAttempts(((Number)member.getValue()).longValue());
+          }
+          break;
         case "jdkSslEngineOptions":
           if (member.getValue() instanceof JsonObject) {
             obj.setJdkSslEngineOptions(new io.vertx.core.net.JdkSSLEngineOptions((io.vertx.core.json.JsonObject)member.getValue()));
@@ -229,11 +234,6 @@ public class RabbitMQOptionsConverter {
         case "reconnectInterval":
           if (member.getValue() instanceof Number) {
             obj.setReconnectInterval(((Number)member.getValue()).longValue());
-          }
-          break;
-        case "reconnectOnInitialConnection":
-          if (member.getValue() instanceof Boolean) {
-            obj.setReconnectOnInitialConnection((Boolean)member.getValue());
           }
           break;
         case "requestedChannelMax":
@@ -424,6 +424,7 @@ public class RabbitMQOptionsConverter {
     if (obj.getIdleTimeoutUnit() != null) {
       json.put("idleTimeoutUnit", obj.getIdleTimeoutUnit().name());
     }
+    json.put("initialConnectAttempts", obj.getInitialConnectAttempts());
     if (obj.getJdkSslEngineOptions() != null) {
       json.put("jdkSslEngineOptions", obj.getJdkSslEngineOptions().toJson());
     }
@@ -470,7 +471,6 @@ public class RabbitMQOptionsConverter {
     json.put("receiveBufferSize", obj.getReceiveBufferSize());
     json.put("reconnectAttempts", obj.getReconnectAttempts());
     json.put("reconnectInterval", obj.getReconnectInterval());
-    json.put("reconnectOnInitialConnection", obj.isReconnectOnInitialConnection());
     json.put("requestedChannelMax", obj.getRequestedChannelMax());
     json.put("requestedFrameMax", obj.getRequestedFrameMax());
     json.put("requestedHeartbeat", obj.getRequestedHeartbeat());

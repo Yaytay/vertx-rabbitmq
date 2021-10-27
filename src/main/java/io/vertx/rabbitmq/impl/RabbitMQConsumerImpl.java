@@ -63,7 +63,7 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
 
     this.vertxContext = vertxContext;
     this.keepMostRecent = options.isKeepMostRecent();
-    this.maxQueueSize = options.maxInternalQueueSize();
+    this.maxQueueSize = options.getMaxInternalQueueSize();
     this.pending = new InboundBuffer<>(vertxContext, maxQueueSize);
     pending.resume();
     this.queueName = queueName;    

@@ -7,6 +7,7 @@ import java.util.List;
 import com.rabbitmq.client.Address;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.ExceptionHandler;
+import com.rabbitmq.client.LongString;
 import com.rabbitmq.client.MetricsCollector;
 import com.rabbitmq.client.RecoveryDelayHandler;
 import com.rabbitmq.client.SaslConfig;
@@ -32,6 +33,7 @@ import io.vertx.core.net.PemKeyCertOptions;
 import io.vertx.core.net.PemTrustOptions;
 import io.vertx.core.net.PfxOptions;
 import io.vertx.core.net.TrustOptions;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
@@ -118,9 +120,9 @@ public class RabbitMQOptions extends NetClientOptions {
   public static final boolean DEFAULT_AUTOMATIC_RECOVERY_ENABLED = false;
 
   /**
-   * The default reconnect on initial connection = {@code true}.
+   * The default number of attempts to make an initial connection = {@code 0L}.
    */
-  public static final boolean DEFAULT_RECONNECT_ON_INITIAL_CONNECTION = true;
+  public static final long DEFAULT_INITIAL_CONNECT_ATTEMPTS = 0L;
 
   /**
    * The default connection retry delay = {@code 10000}.
@@ -167,9 +169,10 @@ public class RabbitMQOptions extends NetClientOptions {
   private long networkRecoveryInterval;
   
   // This (and reconnectAttempts, reconnectInterval from NetClientOptions) control the reconnects implented in this library
-  private boolean reconnectOnInitialConnection;
+  private long initialConnectAttempts;
   
   private String connectionName;
+
   private Map<String, Object> clientProperties;
   private Predicate<ShutdownSignalException> connectionRecoveryTriggeringCondition;
   private CredentialsProvider credentialsProvider;
@@ -222,7 +225,7 @@ public class RabbitMQOptions extends NetClientOptions {
     this.networkRecoveryInterval = other.networkRecoveryInterval;
     this.automaticRecoveryEnabled = other.automaticRecoveryEnabled;
     this.topologyRecoveryEnabled = other.topologyRecoveryEnabled;
-    this.reconnectOnInitialConnection = other.reconnectOnInitialConnection;
+    this.initialConnectAttempts = other.initialConnectAttempts;
     this.requestedChannelMax = other.requestedChannelMax;
     this.requestedFrameMax = other.requestedFrameMax;
     this.connectionName = other.connectionName;
@@ -271,14 +274,34 @@ public class RabbitMQOptions extends NetClientOptions {
     this.networkRecoveryInterval = DEFAULT_NETWORK_RECOVERY_INTERNAL;
     this.automaticRecoveryEnabled = DEFAULT_AUTOMATIC_RECOVERY_ENABLED;
     this.topologyRecoveryEnabled = null;
-    this.reconnectOnInitialConnection = DEFAULT_RECONNECT_ON_INITIAL_CONNECTION;
+    this.initialConnectAttempts = DEFAULT_INITIAL_CONNECT_ATTEMPTS;
     this.connectionName = DEFAULT_CONNECTION_NAME;
     
     this.channelRpcTimeout = DEFAULT_CHANNEL_RPC_TIMEOUT;
     this.channelShouldCheckRpcResponseType = DEFAULT_CHANNEL_SHOULD_CHECK_RPC_RESPONSE_TYPE;
-    this.clientProperties = AMQConnection.defaultClientProperties();
+    this.clientProperties = unLongStringMap(AMQConnection.defaultClientProperties());
+  }
+  
+  private static Map<String, Object> unLongStringMap(Map<String, Object> src) {
+    Map<String, Object> dst = new HashMap<>();
+    src.forEach((k,v) -> {
+      if (v instanceof LongString) {
+        dst.put(k, v.toString());
+      } else if (v instanceof Map) {
+        dst.put(k, unLongStringMap((Map<String, Object>) v));
+      } else {
+        dst.put(k, v);
+      }
+    });
+    return dst;
   }
 
+  @Override
+  public JsonObject toJson() {
+    JsonObject json = new JsonObject();
+    RabbitMQOptionsConverter.toJson(this, json);
+    return json;
+  }
 
   /**
    * Get multiple addresses for cluster mode.
@@ -515,30 +538,36 @@ public class RabbitMQOptions extends NetClientOptions {
     return this;
   }
 
-  public boolean isReconnectOnInitialConnection() {
-    return reconnectOnInitialConnection;
+  public long getInitialConnectAttempts() {
+    return initialConnectAttempts;
   }
 
   /**
    * Enable or disable reconnection, as implemented in this library, on initial connections.
    * 
-   * If reconnections are enabled it will, by default, make multiple attempts to connect on startup.
-   * This can cause problems if the configuration is wrong, and it is this bad configuration that is preventing connection.
-   * To work around this reconnectOnInitialConnection can be set to false (it defaults to true).
-   * When reconnectOnInitialConnection is false (and reconnectAttempts > 0) reconnection attempts will not be made until
-   * after the first connection has been successful.
+   * In some situations (primarily dynamic test environments) brokers will be brought up at the same time as clients
+   * , and may not be up in time for the connection.
    * 
-   * Attempting to reconnect on the initial connection is particularly beneficial when running in a dynamic environment in
-   * which the target RabbitMQ server may not be up at the time of the initial connection.
+   * To work around this initialConnectAttempts can be set to the number of attempts to make for that initial connection.
+   * The default value of zero means that if the configuration is wrong it will be identified quickly.
    * 
-   * @param reconnectOnInitialConnection if {@code false}, prevents automatic recovery on the first connection attempts.
+   * Note that the Java client recovery process will never attempt recovery on the initial connection.
+   * It should be possible to combine a non-zero value for initial connect attempts with the Java client recovery process:
+   * <pre>
+   * options.setReconnectAttempts(0);
+   * options.setInitialConnectAttempts(10);
+   * options.setAutomaticRecoveryEnabled(true);
+   * </pre>
+   * 
+   * @param initialConnectAttempts number of attempts to make for the initial connection.
    * @return a reference to this, so the API can be used fluently
    * 
    */
-  public RabbitMQOptions setReconnectOnInitialConnection(boolean reconnectOnInitialConnection) {
-    this.reconnectOnInitialConnection = reconnectOnInitialConnection;
+  public RabbitMQOptions setInitialConnectAttempts(long initialConnectAttempts) {
+    this.initialConnectAttempts = initialConnectAttempts;
     return this;
   }
+  
   
   /**
    * @return {@code true} because NIO Sockets are always enabled
