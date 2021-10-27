@@ -78,36 +78,17 @@ public class RabbitMQClientTest {
     logger.info("Ending test");
   }
   
-  private static final class TestConsumer implements Consumer {
+  private static final class TestConsumer extends DefaultConsumer {
     
     private final TestContext testContext;
     private final Promise promise;
 
-    public TestConsumer(TestContext testContext, Promise promise) {
+    public TestConsumer(RabbitMQChannel channel, TestContext testContext, Promise promise) {
+      super(channel);
       this.testContext = testContext;
       this.promise = promise;
     }
     
-    @Override
-    public void handleConsumeOk(String consumerTag) {
-    }
-
-    @Override
-    public void handleCancelOk(String consumerTag) {
-    }
-
-    @Override
-    public void handleCancel(String consumerTag) throws IOException {
-    }
-
-    @Override
-    public void handleShutdownSignal(String consumerTag, ShutdownSignalException sig) {
-    }
-
-    @Override
-    public void handleRecoverOk(String consumerTag) {
-    }
-
     @Override
     public void handleDelivery(String consumerTag, Envelope envelope, BasicProperties properties, byte[] body) throws IOException {
       logger.info("Message received");
@@ -133,7 +114,7 @@ public class RabbitMQClientTest {
     conChan.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)
             .compose(v -> conChan.queueDeclare(queue, true, false, true, null))
             .compose(v -> conChan.queueBind(queue, exchange, "", null))
-            .compose(v -> conChan.basicConsume(queue, true, getClass().getSimpleName(), false, false, null, new TestConsumer(context, donePromise)))
+            .compose(v -> conChan.basicConsume(queue, true, getClass().getSimpleName(), false, false, null, new TestConsumer(conChan, context, donePromise)))
             .compose(v -> pubChan.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null))
             .compose(v -> pubChan.basicPublish(exchange, "", true, new BasicProperties(), "Hello".getBytes(StandardCharsets.UTF_8)))
             .compose(v -> donePromise.future())
@@ -162,7 +143,7 @@ public class RabbitMQClientTest {
   public void testCreateWithServerThatArrivesLate(TestContext context) throws IOException {    
     RabbitMQOptions config = new RabbitMQOptions();
     config.setReconnectInterval(500);
-    config.setInitialConnectAttempts(20);
+    config.setInitialConnectAttempts(50);
     RabbitMQConnectionImpl connection = (RabbitMQConnectionImpl) RabbitMQClient.create(testRunContext.vertx(), config);
 
     int port = findOpenPort();    
