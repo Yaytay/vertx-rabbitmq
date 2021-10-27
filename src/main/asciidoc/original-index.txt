@@ -64,6 +64,31 @@ Thus a more usual approach to connecting would look like:
 {@link examples.RabbitMQExamples#createConnectionAndUseImmediately}
 ----
 
+== Operations
+
+The following are some examples of the operations supported by the RabbitMQService API.
+Consult the javadoc/documentation for detailed information on all API methods.
+
+=== Publish
+
+Publish a message to a queue
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#basicPublish}
+----
+
+=== Consume
+
+Set up a consumer to receive messages from a queue.
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#basicConsume}
+----
+
+=== Reliable Publishing
+
 ////
 // === Recovery and Reconnections
 // 

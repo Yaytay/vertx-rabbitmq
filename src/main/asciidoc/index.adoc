@@ -1,0 +1,97 @@
+= RabbitMQ Client for Vert.x
+
+A Vert.x client allowing applications to interact with a RabbitMQ broker (AMQP 0.9.1) via a reactive API.
+
+**This service is experimental and the APIs are likely to change before settling down.**
+
+The client is a relatively thin wrapper around the standard Java RabbitMQ client, with most interactions wrapped in a call to executeBlocking.
+There should not be many things that can be done with the standard Java RabbitMQ client that cannot be done with this Vertx client.
+One exception is that this Vertx client only supports NIO.
+
+== Getting Started
+
+=== Maven
+
+Add the following dependency to your maven project
+
+[source,xml,subs="+attributes"]
+----
+<dependency>
+  <groupId>io.vertx</groupId>
+  <artifactId>vertx-rabbitmq-client</artifactId>
+  <version>${maven.version}</version>
+</dependency>
+----
+
+=== Gradle
+
+Add the following dependency to your gradle project
+
+[source,groovy,subs="+attributes"]
+----
+dependencies {
+  compile 'io.vertx:vertx-rabbitmq-client:${maven.version}'
+}
+----
+
+=== Create a connection
+
+The object model of the Vertx client mirrors that of the Java RabbitMQ client - a Connection must be created and then this can be used to create multiple Channels.
+Interactions with the broker take place over channels.
+
+The intended behaviour with this library is that a single Connection should be created and a Channel should be created for each type of thing that is to be done.
+For consuming messages this implies a single RabbitMQChannel for each queue being consumed.
+For publishing messages a single RabbitMQChannel can be used for all messages, but this can make handling confirmations more complex, so the recommendation
+is to create as many channels as necessary to keep your structures simple (better to inject a RabbitMQConnection than a RabbitMQChannel).
+
+
+You can create a connection and channel as follows using a full amqp uri:
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionWithUri}
+----
+
+Or you can also specify individual parameters manually:
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionWithManualParameters}
+----
+
+You can also set multiples addresses to connect to a cluster;
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionWithMultipleHost}
+----
+
+All connections and channels are created lazily and only actually attempt to connect to the server when they are actually used (or when specifically asked to as above).
+Thus a more usual approach to connecting would look like:
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionAndUseImmediately}
+----
+
+== Operations
+
+The following are some examples of the operations supported by the RabbitMQService API.
+Consult the javadoc/documentation for detailed information on all API methods.
+
+=== Publish
+
+Publish a message to a queue
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#basicPublish}
+----
+
+=== Consume
+
+Set up a consumer to receive messages from a queue.
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#basicConsume}
+----
+
+=== Reliable Publishing
+

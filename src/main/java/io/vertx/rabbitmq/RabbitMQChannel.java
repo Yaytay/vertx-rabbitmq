@@ -92,7 +92,7 @@ public interface RabbitMQChannel {
    * @return a RabbitMQPublisher on this channel that reliably sends messages.
    */
   RabbitMQPublisher createPublisher(String exchange, RabbitMQPublisherOptions options);
-  
+      
   /**
    * Create a RabbitMQConsumer on this channel that reliably receives messages.
    * @param queue The queue that messages are being pushed from.

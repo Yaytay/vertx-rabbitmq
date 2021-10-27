@@ -15,13 +15,18 @@
  */
 package examples;
 
+import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Address;
 import com.rabbitmq.client.BuiltinExchangeType;
+import com.rabbitmq.client.Envelope;
 import io.vertx.core.Vertx;
+import io.vertx.rabbitmq.DefaultConsumer;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQClient;
 import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQOptions;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 /**
@@ -88,6 +93,49 @@ public class RabbitMQExamples {
     channel.exchangeDeclare("exchange", BuiltinExchangeType.FANOUT, true, true, null)
             .compose(v -> channel.queueDeclare("queue", true, true, true, null))
             .compose(v -> channel.queueBind("queue", "exchange", "", null))
+            .onComplete(ar -> {
+            });
+  }
+  
+  public void basicPublish() {
+    Vertx vertx = Vertx.vertx();
+    RabbitMQOptions config = new RabbitMQOptions();
+    config.setUri("amqp://brokerhost/vhost");
+    config.setConnectionName(this.getClass().getSimpleName());
+    
+    RabbitMQConnection connection = RabbitMQClient.create(vertx, config);    
+    RabbitMQChannel channel = connection.createChannel();
+    channel.exchangeDeclare("exchange", BuiltinExchangeType.FANOUT, true, true, null)
+            .compose(v -> channel.basicPublish("exchange", "routingKey", false, null, "Body".getBytes(StandardCharsets.UTF_8)))
+            .onComplete(ar -> {
+            });
+  }
+  
+  private static class ExampleConsumer extends DefaultConsumer {
+
+    public ExampleConsumer(RabbitMQChannel channel) {
+      super(channel);
+    }
+
+    @Override
+    public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+      System.out.println(new String(body, StandardCharsets.UTF_8));
+    }
+    
+  }
+  
+  public void basicConsume() {
+    Vertx vertx = Vertx.vertx();
+    RabbitMQOptions config = new RabbitMQOptions();
+    config.setUri("amqp://brokerhost/vhost");
+    config.setConnectionName(this.getClass().getSimpleName());
+    
+    RabbitMQConnection connection = RabbitMQClient.create(vertx, config);    
+    RabbitMQChannel channel = connection.createChannel();
+    channel.exchangeDeclare("exchange", BuiltinExchangeType.FANOUT, true, true, null)
+            .compose(v -> channel.queueDeclare("queue", true, true, true, null))
+            .compose(v -> channel.queueBind("queue", "exchange", "", null))
+            .compose(v -> channel.basicConsume("queue", true, channel.getChannelId(), false, false, null, new ExampleConsumer(channel)))
             .onComplete(ar -> {
             });
   }
