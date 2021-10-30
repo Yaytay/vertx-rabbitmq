@@ -23,7 +23,7 @@ import io.vertx.core.streams.ReadStream;
  * @author jtalbut
  */
 @VertxGen
-public interface RabbitMQPublisher extends AutoCloseable { 
+public interface RabbitMQRepublishingPublisher extends AutoCloseable { 
   
   /**
    * Stop the rabbitMQ publisher.

@@ -91,7 +91,7 @@ public interface RabbitMQChannel {
    * @param options Options for configuring the publisher.
    * @return a RabbitMQPublisher on this channel that reliably sends messages.
    */
-  RabbitMQPublisher createPublisher(String exchange, RabbitMQPublisherOptions options);
+  RabbitMQRepublishingPublisher createPublisher(String exchange, RabbitMQPublisherOptions options);
       
   /**
    * Create a RabbitMQConsumer on this channel that reliably receives messages.
@@ -161,7 +161,15 @@ public interface RabbitMQChannel {
   Future<Void> basicPublish(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body);
   
   Future<Void> basicPublish(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body, Handler<Long> deliveryTagHandler);
+
+  Future<Void> basicPublishWithConfirm(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body);
   
+  Future<Void> basicPublishWithConfirm(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body, Handler<Long> deliveryTagHandler);
+
+  Future<Void> confirmSelect();
+
+  Future<Void> waitForConfirms(long timeout);
+
   Future<Void> close();
   
   Future<Void> close(int closeCode, String closeMessage);

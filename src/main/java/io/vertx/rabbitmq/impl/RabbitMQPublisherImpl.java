@@ -27,7 +27,6 @@ import io.vertx.core.streams.ReadStream;
 import io.vertx.core.streams.impl.InboundBuffer;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
-import io.vertx.rabbitmq.RabbitMQPublisher;
 import io.vertx.rabbitmq.RabbitMQPublisherConfirmation;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import java.io.IOException;
@@ -37,13 +36,14 @@ import java.util.Iterator;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import io.vertx.rabbitmq.RabbitMQRepublishingPublisher;
 
 
 /**
  *
  * @author jtalbut
  */
-public class RabbitMQPublisherImpl implements RabbitMQPublisher, ReadStream<RabbitMQPublisherConfirmation> {
+public class RabbitMQPublisherImpl implements RabbitMQRepublishingPublisher, ReadStream<RabbitMQPublisherConfirmation> {
   
   private static final Logger log = LoggerFactory.getLogger(RabbitMQPublisherImpl.class);
   

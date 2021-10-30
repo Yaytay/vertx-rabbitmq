@@ -36,7 +36,6 @@ import io.vertx.rabbitmq.RabbitMQConfirmation;
 import io.vertx.rabbitmq.RabbitMQConsumer;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQOptions;
-import io.vertx.rabbitmq.RabbitMQPublisher;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -45,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import io.vertx.rabbitmq.RabbitMQRepublishingPublisher;
 
 /**
  *
@@ -68,6 +68,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   private long knownConnectionInstance;
   private final int retries;
   private volatile boolean closed;
+  private volatile boolean confirmSelected;
 
 
   public RabbitMQChannelImpl(Vertx vertx, RabbitMQConnectionImpl connection, RabbitMQOptions options) {
@@ -99,7 +100,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   }
 
   @Override
-  public RabbitMQPublisher createPublisher(String exchange, RabbitMQPublisherOptions options) {
+  public RabbitMQRepublishingPublisher createPublisher(String exchange, RabbitMQPublisherOptions options) {
     return new RabbitMQPublisherImpl(vertx, this, exchange, options, retries > 0);
   }
 
@@ -119,6 +120,29 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
       channel.confirmSelect();
 
       return listener;
+    });
+  }
+  
+  @Override
+  public Future<Void> confirmSelect() {
+
+    confirmSelected = true;
+    return onChannel(() -> {
+
+      channel.confirmSelect();
+
+      return null;
+    });
+  }
+
+  @Override
+  public Future<Void> waitForConfirms(long timeout) {
+
+    return onChannel(() -> {
+
+      channel.waitForConfirmsOrDie(timeout);
+
+      return null;
     });
   }
 
@@ -292,12 +316,12 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
      * This is only valid if:
      * 1. The RabbitMQClient is using NIO.
      * 2. Synchronous confirms are not enabled.
-     * both of which are mandated by this version of the client.
+     * the first of which is mandated by this client and the second by checking confirmSelected.
      * 
      * Synchronizing is necessary because this introduces a race condition in the generation of the delivery tag.
      */
     try {
-      if (channel != null && channel.isOpen()) {
+      if (!confirmSelected && channel != null && channel.isOpen()) {
         synchronized(publishLock) {
           if (deliveryTagHandler != null) {
             long deliveryTag = channel.getNextPublishSeqNo();
@@ -322,6 +346,31 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
       return null;
     }).mapEmpty();
     
+  }
+
+  @Override
+  public Future<Void> basicPublishWithConfirm(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body, Handler<Long> deliveryTagHandler) {
+
+    if (!confirmSelected) {
+      return Future.failedFuture(new IllegalStateException("Must call confirmSelect before basicPublishWithConfirm"));
+    }
+    return onChannel(() -> {
+      synchronized(publishLock) {
+        if (deliveryTagHandler != null) {
+          long deliveryTag = channel.getNextPublishSeqNo();
+          deliveryTagHandler.handle(deliveryTag);
+        }
+      }
+      channel.basicPublish(exchange, routingKey, mandatory, props, body);
+      channel.waitForConfirms();
+      return null;
+    }).mapEmpty();
+    
+  }
+
+  @Override
+  public Future<Void> basicPublishWithConfirm(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body) {
+    return basicPublishWithConfirm(exchange, routingKey, mandatory, props, body, null);
   }
 
   @Override

@@ -95,3 +95,31 @@ Set up a consumer to receive messages from a queue.
 
 === Reliable Publishing
 
+Message brokers can be used in two different ways:
+# At most once delivery.
+# At least once delivery.
+Achieving at-most-once delivery is the easiest and the default, 
+and is usually not what is required as it makes no guarantees that messages will arrive at all.
+
+In order to achieve at least once delivery publishers must confirm that messages 
+they have sent have been received by the broker and consumers must accept that individual messages
+may be received more than once.
+Publishers confirming messages can be done either synchronously or asynchronously.
+Synchronous message confirmation is very simple, but has a bad effect on publish rate as publishes 
+must be followed by a call to wait for the broker to confirm receipt.
+Synchronous message confirmations present a problem for an asynchronous system like Vertx - 
+the client must ensure that no calls to basicPublish are made between the publishing of the message(s) they are
+concerned about and the completion of the call to waitForConfirms.
+It is recommended that synchronous confirmations are not used with this client.
+
+Two classes are provided to make handling asynchronous confirmations simpler.
+The first, RabbitMQRepublishingPublisher, tracks all messages sent to it and republishes them on a new
+connection if the channel drops before they are confirmed.
+The second, RabbitMQFuturePublisher, returns a Future for each published message that will be completed when the 
+message is confirmed and failed if either the message is rejected by the broker or if the connection fails.
+
+
+
+
+
+

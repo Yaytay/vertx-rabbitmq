@@ -67,7 +67,7 @@ public class RabbitMQClientReconnectTest {
   private final Promise<Long> allMessagesReceived = Promise.promise();
   
   private RabbitMQChannel pubChannel;
-  private RabbitMQPublisher publisher;
+  private RabbitMQRepublishingPublisher publisher;
   private RabbitMQChannel conChannel;
   private RabbitMQConsumer consumer;
   

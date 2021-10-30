@@ -17,9 +17,7 @@ package io.vertx.rabbitmq;
 
 import com.rabbitmq.client.AMQP.BasicProperties;
 import com.rabbitmq.client.BuiltinExchangeType;
-import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.Envelope;
-import com.rabbitmq.client.ShutdownSignalException;
 import io.vertx.core.Promise;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
@@ -116,7 +114,9 @@ public class RabbitMQClientTest {
             .compose(v -> conChan.queueBind(queue, exchange, "", null))
             .compose(v -> conChan.basicConsume(queue, true, getClass().getSimpleName(), false, false, null, new TestConsumer(conChan, context, donePromise)))
             .compose(v -> pubChan.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null))
+            .compose(v -> pubChan.confirmSelect())
             .compose(v -> pubChan.basicPublish(exchange, "", true, new BasicProperties(), "Hello".getBytes(StandardCharsets.UTF_8)))
+            .compose(v -> pubChan.waitForConfirms(1000))
             .compose(v -> donePromise.future())
             .onComplete(ar -> {
               if (ar.succeeded()) {
