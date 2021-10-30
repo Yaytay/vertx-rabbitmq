@@ -300,9 +300,6 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     synchronized(connectingPromiseLock) {
       if (((connectingFuture == null) || (lastInstance != this.connectCount.get())) && !closed) {
         synchronized(connectionLock) {       
-          if (lastConnectedInstance > 0) {
-            logger.info("Break");
-          }
           if (lastConnectedInstance != connectCount.get()) {
             reconnectCount = 0;
           }

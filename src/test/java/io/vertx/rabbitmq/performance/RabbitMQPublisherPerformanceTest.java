@@ -54,8 +54,8 @@ public class RabbitMQPublisherPerformanceTest {
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientTest.class);
   
-  private static final long WARMUP_ITERATIONS = 1000;
-  private static final long ITERATIONS = 10000;
+  private static final long WARMUP_ITERATIONS = 10000;
+  private static final long ITERATIONS = 30000;
   
   @ClassRule
   public static final GenericContainer rabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
@@ -127,7 +127,8 @@ public class RabbitMQPublisherPerformanceTest {
             , new WaitOnEachMessage(connection)
             , new WaitEveryNMessages(connection, 10)
             , new WaitEveryNMessages(connection, 100)
-            // , new ReliablePublisher(connection)
+            , new WaitEveryNMessages(connection, 1000)
+            , new ReliablePublisher(connection)
     );
 
     channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)

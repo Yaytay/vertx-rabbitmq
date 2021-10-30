@@ -247,7 +247,6 @@ public class RabbitMQPublisherImpl implements RabbitMQRepublishingPublisher, Rea
   }
 
   private void handleConfirmation(RabbitMQConfirmation rawConfirmation) {
-    log.info("Got confirmation: {}", rawConfirmation.toJson());
     synchronized(pendingAcks) {
       if (rawConfirmation.isMultiple()) {
         for (Iterator<MessageDetails> iter = pendingAcks.iterator(); iter.hasNext(); ) {

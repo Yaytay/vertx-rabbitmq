@@ -24,9 +24,11 @@ import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import io.vertx.rabbitmq.RabbitMQRepublishingPublisher;
+import io.vertx.rabbitmq.impl.RabbitMQChannelImpl;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -34,8 +36,11 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class ReliablePublisher implements RabbitMQPublisherStresser {
 
+  private static final Logger log = LoggerFactory.getLogger(RabbitMQChannelImpl.class);
+  
   private final RabbitMQChannel channel;
   private String exchange;
+  private RabbitMQRepublishingPublisher publisher;
 
   public ReliablePublisher(RabbitMQConnection connection) {
     this.channel = connection.createChannel();
@@ -49,14 +54,18 @@ public class ReliablePublisher implements RabbitMQPublisherStresser {
   @Override
   public Future<Void> init(String exchange) {
     this.exchange = exchange;
-    return channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)
-            .compose(v -> channel.confirmSelect())
-            ;
+    channel.addChannelEstablishedCallback(promise -> {
+      channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)
+              .compose(v -> channel.confirmSelect())
+              .onComplete(promise)
+              ;
+    });
+    publisher = channel.createPublisher(exchange, new RabbitMQPublisherOptions().setMaxInternalQueueSize(1000000));
+    return Future.succeededFuture();
   }
 
   @Override
   public Future<Void> runTest(long iterations) {
-    RabbitMQRepublishingPublisher publisher = channel.createPublisher(exchange, new RabbitMQPublisherOptions());
     for (long i = 0; i < iterations; ++i) {
       String idString = Long.toString(i);
       publisher.publish(""
