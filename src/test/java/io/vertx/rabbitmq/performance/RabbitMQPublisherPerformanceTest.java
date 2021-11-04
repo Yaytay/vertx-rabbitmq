@@ -54,8 +54,8 @@ public class RabbitMQPublisherPerformanceTest {
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientTest.class);
   
-  private static final long WARMUP_ITERATIONS = 10000;
-  private static final long ITERATIONS = 30000;
+  private static final long WARMUP_ITERATIONS = 10;// * 1000;
+  private static final long ITERATIONS = 50;// * 1000;
   
   @ClassRule
   public static final GenericContainer rabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
@@ -124,11 +124,12 @@ public class RabbitMQPublisherPerformanceTest {
     
     List<RabbitMQPublisherStresser> tests = Arrays.asList(
             new FireAndForget(connection)
-            , new WaitOnEachMessage(connection)
-            , new WaitEveryNMessages(connection, 10)
-            , new WaitEveryNMessages(connection, 100)
-            , new WaitEveryNMessages(connection, 1000)
-            , new ReliablePublisher(connection)
+//            , new WaitOnEachMessage(connection)
+//            , new WaitEveryNMessages(connection, 10)
+//            , new WaitEveryNMessages(connection, 100)
+//            , new WaitEveryNMessages(connection, 1000)
+//            , new FuturePublisher(connection)
+//            , new ReliablePublisher(connection)
     );
 
     channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)
@@ -171,20 +172,22 @@ public class RabbitMQPublisherPerformanceTest {
   }
   
   private Future<Void> runTest(RabbitMQPublisherStresser test) {
-    return 
-            test.runTest(WARMUP_ITERATIONS)
-                    .compose(v -> {
-                      long start = System.currentTimeMillis();
-                      return test.runTest(ITERATIONS)
-                              .compose(v2 -> {
-                                long end = System.currentTimeMillis();
-                                long duration = end - start;
-                                results.add(new Result(test.getName(), duration));
-                                double seconds = duration / 1000.0;
-                                logger.info("Result: {}\t{}s\t{} M/s", test.getName(), seconds, ITERATIONS / seconds);
-                                return Future.succeededFuture();
-                              });
-                    });
+    return testRunContext.vertx().executeBlocking(promise -> {
+      test.runTest(WARMUP_ITERATIONS)
+              .compose(v -> {
+                long start = System.currentTimeMillis();
+                return test.runTest(ITERATIONS)
+                        .compose(v2 -> {
+                          long end = System.currentTimeMillis();
+                          long duration = end - start;
+                          results.add(new Result(test.getName(), duration));
+                          double seconds = duration / 1000.0;
+                          logger.info("Result: {}\t{}s\t{} M/s", test.getName(), seconds, ITERATIONS / seconds);
+                          return Future.<Void>succeededFuture();
+                        });
+              })
+              .onComplete(promise);
+    });
    
   }
   

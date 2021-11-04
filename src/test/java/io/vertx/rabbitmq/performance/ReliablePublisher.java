@@ -15,7 +15,6 @@
  */
 package io.vertx.rabbitmq.performance;
 
-import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.AMQP.BasicProperties;
 import com.rabbitmq.client.BuiltinExchangeType;
 import io.vertx.core.Future;

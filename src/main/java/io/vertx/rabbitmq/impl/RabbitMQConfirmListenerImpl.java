@@ -8,6 +8,8 @@ import io.vertx.core.streams.ReadStream;
 import io.vertx.core.streams.impl.InboundBuffer;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import java.io.IOException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -15,6 +17,9 @@ import java.io.IOException;
  */
 public class RabbitMQConfirmListenerImpl implements ConfirmListener, ReadStream<RabbitMQConfirmation> {
 
+  @SuppressWarnings("constantname")
+  private static final Logger logger = LoggerFactory.getLogger(RabbitMQConfirmListenerImpl.class);
+  
   private final Context handlerContext;
   private final RabbitMQChannel channel;
   private final InboundBuffer<RabbitMQConfirmation> pending;

@@ -25,9 +25,7 @@ import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
 import io.vertx.rabbitmq.RabbitMQFuturePublisher;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,10 +45,10 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
   private final RabbitMQPublisherOptions options;
 
   private String lastChannelId = null;
-  private long head;
-  private static LinkedList<Promise<Void>> promises = new LinkedList<>();
+  private long head = 0;
+  private static IndexedQueue<Promise<Void>> promises = new IndexedQueue<>();
   
-  public RabbitMQFuturePublisherImpl(Vertx vertx, RabbitMQChannel channel, String exchange, RabbitMQPublisherOptions options, boolean shouldReconnect) {
+  public RabbitMQFuturePublisherImpl(Vertx vertx, RabbitMQChannel channel, String exchange, RabbitMQPublisherOptions options) {
     this.vertx = vertx;
     this.channel = channel;
     this.exchange = exchange;
@@ -64,13 +62,8 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
                     lastChannelId = channel.getChannelId();
                   } else if (!lastChannelId.equals(channel.getChannelId())) {
                     context.runOnContext(v -> {
-                      List<Promise> failedFutures;
-                      synchronized(promises) {
-                        failedFutures = new ArrayList<>(promises);
-                        head = -1;
-                        promises.clear();
-                      }
-                      promises.forEach(promise -> promise.fail("Channel reconnected"));
+                      List<Promise> failedFutures = copyPromises();
+                      failedFutures.forEach(promise -> promise.fail("Channel reconnected"));
                     });
                   }
                   p.complete();
@@ -81,15 +74,22 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
     });
     this.channel.addChannelRecoveryCallback(c -> {
       context.runOnContext(v -> {
-        List<Promise> failedFutures;
-        synchronized(promises) {
-          failedFutures = new ArrayList<>(promises);
-          head = -1;
-          promises.clear();
-        }
+        List<Promise> failedFutures = copyPromises();
         promises.forEach(p -> p.fail("Channel reconnected"));
       });
     });
+  }
+
+  private List<Promise> copyPromises() {
+    List<Promise> failedFutures;
+    synchronized(promises) {
+      failedFutures = new ArrayList<>(promises.size());
+      for(Promise promise : promises) {
+        failedFutures.add(promise);
+      }
+      promises.clear();
+    }
+    return failedFutures;
   }
   
   protected final Future<Void> addConfirmListener() {
@@ -111,7 +111,7 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
       if (rawConfirmation.isMultiple() || rawConfirmation.getDeliveryTag() == head) {
         while(head <= rawConfirmation.getDeliveryTag()) {
           ++head;
-          Promise<Void> promise = promises.remove();
+          Promise<Void> promise = promises.removeFirst();
           completePromise(promise, rawConfirmation);
         }
       } else {
@@ -140,7 +140,14 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
 
   @Override
   public Future<Void> publish(String routingKey, AMQP.BasicProperties properties, byte[] body) {
-    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    Promise<Void> promise = Promise.promise();
+    channel.basicPublish(exchange, routingKey, false, properties, body, deliveryTag -> {
+      log.info("Message {} has delivery tag {}", new String(body), deliveryTag);
+      synchronized(promises) {
+        promises.set((int) (deliveryTag - head), promise);
+      }
+    });
+    return promise.future();
   }
   
   

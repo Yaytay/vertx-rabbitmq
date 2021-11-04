@@ -100,10 +100,10 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     if (uriString != null) {      
       try {
         URI uri = new URI(uriString);
-        cf.setUri(uri);
         if ("amqps".equals(uri.getScheme())) {
           configureSslProtocol(cf);
         }
+        cf.setUri(uri);
       } catch (Exception e) {
         throw new IllegalArgumentException("Invalid rabbitmq connection uri ", e);
       }
@@ -247,13 +247,14 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   }
 
   private void configureSslProtocol(ConnectionFactory cf) throws Exception {
-    cf.useSslProtocol();
     if (config.getKeyStoreOptions() != null) {
       KeyManagerFactory kmf = config.getKeyStoreOptions().getKeyManagerFactory(vertx);
       TrustManagerFactory tmf = config.getKeyStoreOptions().getTrustManagerFactory(vertx);
       SSLContext sslContext = SSLContext.getInstance("TLSv1.3");
       sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);      
       cf.useSslProtocol(sslContext);
+    } else {
+      cf.useSslProtocol();
     }
   }
 

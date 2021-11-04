@@ -94,6 +94,14 @@ public interface RabbitMQChannel {
   RabbitMQRepublishingPublisher createPublisher(String exchange, RabbitMQPublisherOptions options);
       
   /**
+   * Creates a RabbitMQPublisher on this channel that reliably sends messages.
+   * @param exchange The exchange that messages are to be sent to.
+   * @param options Options for configuring the publisher.
+   * @return a RabbitMQPublisher on this channel that reliably sends messages.
+   */
+  RabbitMQFuturePublisher createFuturePublisher(String exchange, RabbitMQPublisherOptions options);
+      
+  /**
    * Create a RabbitMQConsumer on this channel that reliably receives messages.
    * @param queue The queue that messages are being pushed from.
    * @param options Options for configuring the consumer.
