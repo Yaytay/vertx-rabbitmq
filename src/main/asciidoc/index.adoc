@@ -70,6 +70,53 @@ Thus a more usual approach to connecting would look like:
 {@link examples.RabbitMQExamples#createConnectionAndUseImmediately}
 ----
 
+=== TLS
+
+The first thing to note is that RabbitMQ supports TLSv1.2 and TLSv1.3, depending upon it's configuration.
+Older versions of TLS can be configured, but shouldn't.
+The Java RabbitMQ client cannot be configured to do TLS version negotiation if any other options are specified
+, so it will usually be necessary to ensure that the correct verison is configured in RabbitMQOptions.
+There is a bug in versions of the Java RabbitMQ client prior to 5.13.2 that causes it to hang on connection when TLSv1.3 is used with NIO
+- the default, therefore, is TLSv1.2.
+
+There are three basic type of TLs connection that can be made a RabbitMQ server:
+* Unsecure.
+The server uses a self-signed certificate and the client doesn't care - this should only be used for testing.
+See <<unsecure_tls_connection>>
+* Public Certificate Chain.
+The server uses a certificate signed by a public CA.
+See <<public_chain_connection>>
+* Self-signed, but secure.
+The server uses a certificate that isn't signed by a public CA, but the client has a copy of the certificate and will validate it.
+See <<private_chain_connection>>
+
+In addition to the above the client may be configured to use client certificates to identify the user to the server (see <<public_chain_with_client_cert_connection>>).
+
+There are four options in the RabbitMQOptions that control TLS connections.
+Any other options that mention TLS are unused.
+* EnabledSecureTransportProtocols
+This defaults to TLSv1.2 currently.
+Only a single value from this Set will be used, so only use a singleton Set.
+* TrustAll
+If set to true the client will accept any certificate, no further configuration is considered.
+* KeyStoreOptions
+Can be used to set the KeyManagerFactory (for client certs) and TrustManagerFactory (for server certs).
+Any other options in the JksOptions class are ignored.
+If both the KeyManagerFactory and TrustManagerFactory are set to null (or if the KeyStoreOptions aren't set and TrustAll is false) the client will use public certificate chain
+verification.
+* TlsHostnameVerification
+If set to true (the default) the hostname in the server certificate will be verified.
+This should usually be true for public certificate but often needs to be false for private certificate authorities (or self-signed certs).
+
+This provides very simple defaults, if TrustAll is true anything will work, if TrustAll is false public certificate chains should work.
+Extra steps are only required for private certificate chains (or specific versions of TLS).
+
+==== Unsecure TLS Connection [[unsecure_tls_connection]]
+==== Public Certificate Chain TLS Connection [[public_chain_connection]]
+==== Private Certificate Chain with Secure TLS Connection [[private_chain_connection]]
+==== Public Certificate Chain With Client Certificate TLS Connection [[public_chain_with_client_cert_connection]]
+
+
 == Operations
 
 The following are some examples of the operations supported by the RabbitMQService API.

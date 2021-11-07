@@ -26,17 +26,21 @@ import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
+import io.vertx.core.net.JksOptions;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,16 +100,41 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     List<Address> addresses = null;
     ConnectionFactory cf = new ConnectionFactory();
     String uriString = config.getUri();
-    // Use uri if set, otherwise support individual connection parameters
+    
+    String username = config.getUser();
+    String password = config.getPassword();
+    String vhost = config.getVirtualHost();
+    
+    // Use uri if set, otherwise support individual connection parameters    
     if (uriString != null) {      
+      URI uri = null;
       try {
-        URI uri = new URI(uriString);
-        if ("amqps".equals(uri.getScheme())) {
-          configureSslProtocol(cf);
-        }
-        cf.setUri(uri);
+        uri = new URI(uriString);
       } catch (Exception e) {
         throw new IllegalArgumentException("Invalid rabbitmq connection uri ", e);
+      }
+      if ("amqps".equals(uri.getScheme())) {
+        configureTlsProtocol(cf);
+      }
+      cf.setUri(uri);
+        
+      // Override the user/pass/vhost values, but only if they are set in the URI and are NOT set in the config
+      String rawUserInfo = uri.getRawUserInfo();
+      if (rawUserInfo != null && !rawUserInfo.isEmpty()) {
+        String parts[] = rawUserInfo.split(":", 2);
+        if (RabbitMQOptions.DEFAULT_USER.equals(username)) {
+          username = URLDecoder.decode(parts[0], "UTF-8");
+        }
+        if (parts.length > 1 && RabbitMQOptions.DEFAULT_PASSWORD.equals(password)) {
+          password = URLDecoder.decode(parts[1], "UTF-8");
+        }
+      }
+      String rawPath = uri.getRawPath();      
+      if (rawPath != null && !rawPath.isEmpty() && RabbitMQOptions.DEFAULT_VIRTUAL_HOST.equals(vhost)) {
+        if (rawPath.startsWith("/")) {
+          rawPath = rawPath.substring(1);
+        }
+        vhost = URLDecoder.decode(rawPath, "UTF-8");
       }
     } else {
       addresses = config.getAddresses().isEmpty()
@@ -115,16 +144,16 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     }
     // Note that this intentionally allows the configuration to override properties from the URL.
     if (config.getUser() != null && !config.getUser().isEmpty()) {
-      cf.setUsername(config.getUser());
+      cf.setUsername(username);
     }
     if (config.getPassword() != null && !config.getPassword().isEmpty()) {
-      cf.setPassword(config.getPassword());
+      cf.setPassword(password);
     }
     if (config.getVirtualHost() != null && !config.getVirtualHost().isEmpty()) {
-      cf.setVirtualHost(config.getVirtualHost());
+      cf.setVirtualHost(vhost);
     }
     if (config.isSsl()) {
-      configureSslProtocol(cf);
+      configureTlsProtocol(cf);
     }
     if (addresses != null) {
       logger.info("{}onnecting to amqp{}://{}@{}/{}"
@@ -246,15 +275,32 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     return conn;
   }
 
-  private void configureSslProtocol(ConnectionFactory cf) throws Exception {
-    if (config.getKeyStoreOptions() != null) {
-      KeyManagerFactory kmf = config.getKeyStoreOptions().getKeyManagerFactory(vertx);
-      TrustManagerFactory tmf = config.getKeyStoreOptions().getTrustManagerFactory(vertx);
-      SSLContext sslContext = SSLContext.getInstance("TLSv1.3");
-      sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);      
-      cf.useSslProtocol(sslContext);
+  private void configureTlsProtocol(ConnectionFactory cf) throws Exception {
+    if (config.isTrustAll()) {
+      cf.useSslProtocol();      
     } else {
-      cf.useSslProtocol();
+      String secureTransportProtocol = config.getEnabledSecureTransportProtocols().stream().findFirst().orElse("TLSv1.2");
+      
+      SSLContext sslContext = SSLContext.getInstance(secureTransportProtocol);
+      JksOptions kco = config.getKeyStoreOptions();
+      KeyManager km[] = null;
+      TrustManager tm[] = null;
+      if (kco != null) {
+        KeyManagerFactory kmf = kco.getKeyManagerFactory(vertx);
+        if (kmf != null) {
+          km = kmf.getKeyManagers();
+        }        
+        TrustManagerFactory tmf = kco.getTrustManagerFactory(vertx);
+        if (tmf  != null) {
+          tm = tmf.getTrustManagers();
+        }
+        sslContext.init(km, tm, null);
+      }
+      sslContext.init(km, tm, null);      
+      cf.useSslProtocol(sslContext);
+      if (config.isTlsHostnameVerification()) {
+        cf.enableHostnameVerification();
+      }
     }
   }
 

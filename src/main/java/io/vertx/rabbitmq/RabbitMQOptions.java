@@ -35,11 +35,13 @@ import io.vertx.core.net.PfxOptions;
 import io.vertx.core.net.TrustOptions;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.function.Predicate;
 import javax.net.SocketFactory;
+
 
 /**
  * RabbitMQ client options, most
@@ -130,6 +132,20 @@ public class RabbitMQOptions extends NetClientOptions {
   public static final long DEFAULT_RECONNECT_INTERVAL = 10000L;
 
   /**
+   * The default ENABLED_SECURE_TRANSPORT_PROTOCOLS value = { "TLSv1.2" }
+   * <p/>
+   * RabbitMQ usually supports only TLSv1.2 and TLSv1.3 (if correctly configured).
+   * Currently there is an issue with the Java client that prevents TLSv1.3 from working with NIO (should be fixed in v5.13.1).
+   * The RabbitMQ client does not do protocol negotiation, so this set should contain only one value.
+   */
+  public static final Set<String> DEFAULT_ENABLED_SECURE_TRANSPORT_PROTOCOLS = Collections.singleton("TLSv1.2");
+  
+  /**
+   * The default DEFAULT_ENABLED_TLS_HOSTNAME_VERIFICATION value = true
+   */
+  public static final boolean DEFAULT_ENABLED_TLS_HOSTNAME_VERIFICATION = true;
+  
+  /**
    * The default connection name = {@code VertxRabbitMQ}.
    * It is strongly recommended that all clients change this to something more identifying.
    */
@@ -162,6 +178,8 @@ public class RabbitMQOptions extends NetClientOptions {
   
   private int channelRpcTimeout;
   private boolean channelShouldCheckRpcResponseType;
+  
+  private boolean tlsHostnameVerification;
   
   // These three control the java RabbitMQ client automatic recovery
   private boolean automaticRecoveryEnabled;
@@ -199,6 +217,7 @@ public class RabbitMQOptions extends NetClientOptions {
   public RabbitMQOptions() {
     super();
     super.setReconnectInterval(DEFAULT_RECONNECT_INTERVAL);
+    super.setEnabledSecureTransportProtocols(DEFAULT_ENABLED_SECURE_TRANSPORT_PROTOCOLS);
     init();
   }
 
@@ -229,6 +248,7 @@ public class RabbitMQOptions extends NetClientOptions {
     this.requestedChannelMax = other.requestedChannelMax;
     this.requestedFrameMax = other.requestedFrameMax;
     this.connectionName = other.connectionName;
+    this.tlsHostnameVerification = other.tlsHostnameVerification;
     
     this.channelRpcTimeout = other.channelRpcTimeout;
     this.channelShouldCheckRpcResponseType = other.channelShouldCheckRpcResponseType;
@@ -276,6 +296,7 @@ public class RabbitMQOptions extends NetClientOptions {
     this.topologyRecoveryEnabled = null;
     this.initialConnectAttempts = DEFAULT_INITIAL_CONNECT_ATTEMPTS;
     this.connectionName = DEFAULT_CONNECTION_NAME;
+    this.tlsHostnameVerification = DEFAULT_ENABLED_TLS_HOSTNAME_VERIFICATION;
     
     this.channelRpcTimeout = DEFAULT_CHANNEL_RPC_TIMEOUT;
     this.channelShouldCheckRpcResponseType = DEFAULT_CHANNEL_SHOULD_CHECK_RPC_RESPONSE_TYPE;
@@ -896,4 +917,14 @@ public class RabbitMQOptions extends NetClientOptions {
   public void setWorkPoolTimeout(int workPoolTimeout) {
     this.workPoolTimeout = workPoolTimeout;
   }
+
+  public boolean isTlsHostnameVerification() {
+    return tlsHostnameVerification;
+  }
+
+  public RabbitMQOptions setTlsHostnameVerification(boolean tlsHostnameVerification) {
+    this.tlsHostnameVerification = tlsHostnameVerification;
+    return this;
+  }
+    
 }

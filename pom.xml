@@ -55,12 +55,15 @@
       <groupId>com.rabbitmq</groupId>
       <artifactId>amqp-client</artifactId>
       <version>${rabbitmq.client.version}</version>
+      <!--version>6.0.0-SNAPSHOT</version-->
       <exclusions>
         <exclusion>
           <groupId>org.slf4j</groupId>
           <artifactId>slf4j-api</artifactId>
         </exclusion>
       </exclusions>
+      <!--scope>system</scope>
+      <systemPath>C:\Scratch\amqp-client-6.0.0-SNAPSHOT.jar</systemPath-->
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>

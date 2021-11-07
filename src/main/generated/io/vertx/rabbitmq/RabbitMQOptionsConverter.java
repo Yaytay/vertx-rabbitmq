@@ -316,6 +316,11 @@ public class RabbitMQOptionsConverter {
             obj.setTcpQuickAck((Boolean)member.getValue());
           }
           break;
+        case "tlsHostnameVerification":
+          if (member.getValue() instanceof Boolean) {
+            obj.setTlsHostnameVerification((Boolean)member.getValue());
+          }
+          break;
         case "topologyRecoveryEnabled":
           if (member.getValue() instanceof Boolean) {
             obj.setTopologyRecoveryEnabled((Boolean)member.getValue());
@@ -489,6 +494,7 @@ public class RabbitMQOptionsConverter {
     json.put("tcpKeepAlive", obj.isTcpKeepAlive());
     json.put("tcpNoDelay", obj.isTcpNoDelay());
     json.put("tcpQuickAck", obj.isTcpQuickAck());
+    json.put("tlsHostnameVerification", obj.isTlsHostnameVerification());
     if (obj.getTopologyRecoveryEnabled() != null) {
       json.put("topologyRecoveryEnabled", obj.getTopologyRecoveryEnabled());
     }
