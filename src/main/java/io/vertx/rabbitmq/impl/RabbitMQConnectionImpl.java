@@ -75,7 +75,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   public RabbitMQConnectionImpl(Vertx vertx, RabbitMQOptions config) {
     this.vertx = vertx;
     this.context = vertx.getOrCreateContext();    
-    this.config = config;
+    this.config = config; // new RabbitMQOptions(config);
   }
 
   @Override
@@ -279,7 +279,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     if (config.isTrustAll()) {
       cf.useSslProtocol();      
     } else {
-      String secureTransportProtocol = config.getEnabledSecureTransportProtocols().stream().findFirst().orElse("TLSv1.2");
+      String secureTransportProtocol = config.getSecureTransportProtocol();
       
       SSLContext sslContext = SSLContext.getInstance(secureTransportProtocol);
       JksOptions kco = config.getKeyStoreOptions();
