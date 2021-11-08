@@ -623,19 +623,21 @@ public class RabbitMQOptions {
   /**
    * Set the value of reconnect attempts
    *
-   * @param attempts  the maximum number of reconnect attempts
+   * @param reconnectAttempts  the maximum number of reconnect attempts
    * @return a reference to this, so the API can be used fluently
    */
-  public RabbitMQOptions setReconnectAttempts(int attempts) {
+  public RabbitMQOptions setReconnectAttempts(int reconnectAttempts) {
+    this.reconnectAttempts = reconnectAttempts;
     return this;
   }
 
   /**
    * Get the time (in ms) between attempts to reconnect.
-   * @param interval the time (in ms) between attempts to reconnect.
+   * @param reconnectInterval the time (in ms) between attempts to reconnect.
    * @return a reference to this, so the API can be used fluently
    */
-  public RabbitMQOptions setReconnectInterval(long interval) {
+  public RabbitMQOptions setReconnectInterval(int reconnectInterval) {
+    this.reconnectInterval = reconnectInterval;
     return this;
   }
 
@@ -913,11 +915,6 @@ public class RabbitMQOptions {
 
   public int getReconnectInterval() {
     return reconnectInterval;
-  }
-
-  public RabbitMQOptions setReconnectInterval(int reconnectInterval) {
-    this.reconnectInterval = reconnectInterval;
-    return this;
   }
 
   public int getReconnectAttempts() {
