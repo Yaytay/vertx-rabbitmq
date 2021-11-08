@@ -27,15 +27,8 @@ import com.rabbitmq.client.impl.recovery.TopologyRecoveryFilter;
 import io.vertx.codegen.annotations.DataObject;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.JksOptions;
-import io.vertx.core.net.KeyCertOptions;
-import io.vertx.core.net.NetClientOptions;
-import io.vertx.core.net.PemKeyCertOptions;
-import io.vertx.core.net.PemTrustOptions;
-import io.vertx.core.net.PfxOptions;
-import io.vertx.core.net.TrustOptions;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
@@ -49,7 +42,7 @@ import javax.net.SocketFactory;
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  */
 @DataObject(generateConverter = true, inheritConverter = true)
-public class RabbitMQOptions extends NetClientOptions {
+public class RabbitMQOptions {
 
   /**
    * The default port = {@code - 1} - {@code 5671} for SSL otherwise {@code 5672}.
@@ -129,7 +122,22 @@ public class RabbitMQOptions extends NetClientOptions {
   /**
    * The default connection retry delay = {@code 10000}.
    */
-  public static final long DEFAULT_RECONNECT_INTERVAL = 10000L;
+  public static final int DEFAULT_RECONNECT_INTERVAL = 10000;
+
+  /**
+   * The default connection retry delay = {@code 0}.
+   */
+  public static final int DEFAULT_RECONNECT_ATTEMPTS = 0;
+
+  /**
+   * The default ssl = {@code false}.
+   */
+  public static final boolean DEFAULT_SSL = false;
+
+  /**
+   * The default trustAll = {@code false}.
+   */
+  public static final boolean DEFAULT_TRUST_ALL = false;
 
   /**
    * The default ENABLED_SECURE_TRANSPORT_PROTOCOLS value = { "TLSv1.2" }
@@ -138,7 +146,7 @@ public class RabbitMQOptions extends NetClientOptions {
    * Currently there is an issue with the Java client that prevents TLSv1.3 from working with NIO (should be fixed in v5.13.1).
    * The RabbitMQ client does not do protocol negotiation, so this set should contain only one value.
    */
-  public static final Set<String> DEFAULT_ENABLED_SECURE_TRANSPORT_PROTOCOLS = Collections.singleton("TLSv1.2");
+  public static final String DEFAULT_SECURE_TRANSPORT_PROTOCOL = "TLSv1.2";
   
   /**
    * The default DEFAULT_ENABLED_TLS_HOSTNAME_VERIFICATION value = true
@@ -181,6 +189,13 @@ public class RabbitMQOptions extends NetClientOptions {
   
   private boolean tlsHostnameVerification;
   
+  private int reconnectInterval;
+  private int reconnectAttempts;
+  private boolean ssl;
+  private boolean trustAll;
+  private String secureTransportProtocol;
+  private JksOptions keyStoreOptions;
+  
   // These three control the java RabbitMQ client automatic recovery
   private boolean automaticRecoveryEnabled;
   private Boolean topologyRecoveryEnabled;
@@ -216,19 +231,15 @@ public class RabbitMQOptions extends NetClientOptions {
 
   public RabbitMQOptions() {
     super();
-    super.setReconnectInterval(DEFAULT_RECONNECT_INTERVAL);
-    super.setEnabledSecureTransportProtocols(DEFAULT_ENABLED_SECURE_TRANSPORT_PROTOCOLS);
     init();
   }
 
   public RabbitMQOptions(JsonObject json) {
-    super(json);
     init();
     RabbitMQOptionsConverter.fromJson(json, this);
   }
 
   public RabbitMQOptions(RabbitMQOptions other) {
-    super(other);
     this.uri = other.uri;
     this.addresses = other.addresses;
     this.user = other.user;
@@ -249,6 +260,13 @@ public class RabbitMQOptions extends NetClientOptions {
     this.requestedFrameMax = other.requestedFrameMax;
     this.connectionName = other.connectionName;
     this.tlsHostnameVerification = other.tlsHostnameVerification;
+    
+    this.reconnectInterval = other.reconnectInterval;
+    this.reconnectAttempts = other.reconnectAttempts;
+    this.ssl = other.ssl;
+    this.trustAll = other.trustAll;
+    this.secureTransportProtocol = other.secureTransportProtocol;
+    this.keyStoreOptions = other.keyStoreOptions;
     
     this.channelRpcTimeout = other.channelRpcTimeout;
     this.channelShouldCheckRpcResponseType = other.channelShouldCheckRpcResponseType;
@@ -298,6 +316,12 @@ public class RabbitMQOptions extends NetClientOptions {
     this.connectionName = DEFAULT_CONNECTION_NAME;
     this.tlsHostnameVerification = DEFAULT_ENABLED_TLS_HOSTNAME_VERIFICATION;
     
+    this.reconnectInterval = DEFAULT_RECONNECT_INTERVAL;
+    this.reconnectAttempts = DEFAULT_RECONNECT_ATTEMPTS;
+    this.ssl = DEFAULT_SSL;
+    this.trustAll = DEFAULT_TRUST_ALL;
+    this.secureTransportProtocol = DEFAULT_SECURE_TRANSPORT_PROTOCOL;
+    
     this.channelRpcTimeout = DEFAULT_CHANNEL_RPC_TIMEOUT;
     this.channelShouldCheckRpcResponseType = DEFAULT_CHANNEL_SHOULD_CHECK_RPC_RESPONSE_TYPE;
     this.clientProperties = unLongStringMap(AMQConnection.defaultClientProperties());
@@ -317,7 +341,6 @@ public class RabbitMQOptions extends NetClientOptions {
     return dst;
   }
 
-  @Override
   public JsonObject toJson() {
     JsonObject json = new JsonObject();
     RabbitMQOptionsConverter.toJson(this, json);
@@ -603,9 +626,7 @@ public class RabbitMQOptions extends NetClientOptions {
    * @param attempts  the maximum number of reconnect attempts
    * @return a reference to this, so the API can be used fluently
    */
-  @Override
   public RabbitMQOptions setReconnectAttempts(int attempts) {
-    super.setReconnectAttempts(attempts);
     return this;
   }
 
@@ -614,9 +635,7 @@ public class RabbitMQOptions extends NetClientOptions {
    * @param interval the time (in ms) between attempts to reconnect.
    * @return a reference to this, so the API can be used fluently
    */
-  @Override
   public RabbitMQOptions setReconnectInterval(long interval) {
-    super.setReconnectInterval(interval);
     return this;
   }
 
@@ -626,9 +645,8 @@ public class RabbitMQOptions extends NetClientOptions {
    * @param ssl true if the connection should connect using ssl.
    * @return a reference to this, so the API can be used fluently
    */
-  @Override
   public RabbitMQOptions setSsl(boolean ssl) {
-    super.setSsl(ssl);
+    this.ssl = ssl;
     return this;
   }
 
@@ -637,51 +655,17 @@ public class RabbitMQOptions extends NetClientOptions {
    * @param trustAll
    * @return 
    */
-  @Override
   public RabbitMQOptions setTrustAll(boolean trustAll) {
-    super.setTrustAll(trustAll);
+    this.trustAll = trustAll;
     return this;
   }
 
-  @Override
-  public RabbitMQOptions setKeyCertOptions(KeyCertOptions options) {
-    super.setKeyCertOptions(options);
-    return this;
-  }
+  public boolean isTrustAll() {
+    return trustAll;
+  }    
 
-  @Override
   public RabbitMQOptions setKeyStoreOptions(JksOptions options) {
-    super.setKeyStoreOptions(options);
-    return this;
-  }
-
-  @Override
-  public RabbitMQOptions setPfxKeyCertOptions(PfxOptions options) {
-    super.setPfxKeyCertOptions(options);
-    return this;
-  }
-
-  @Override
-  public RabbitMQOptions setPemKeyCertOptions(PemKeyCertOptions options) {
-    super.setPemKeyCertOptions(options);
-    return this;
-  }
-
-  @Override
-  public RabbitMQOptions setTrustOptions(TrustOptions options) {
-    super.setTrustOptions(options);
-    return this;
-  }
-
-  @Override
-  public RabbitMQOptions setPemTrustOptions(PemTrustOptions options) {
-    super.setPemTrustOptions(options);
-    return this;
-  }
-
-  @Override
-  public RabbitMQOptions setPfxTrustOptions(PfxOptions options) {
-    super.setPfxTrustOptions(options);
+    this.keyStoreOptions = options;
     return this;
   }
 
@@ -926,5 +910,35 @@ public class RabbitMQOptions extends NetClientOptions {
     this.tlsHostnameVerification = tlsHostnameVerification;
     return this;
   }
-    
+
+  public int getReconnectInterval() {
+    return reconnectInterval;
+  }
+
+  public RabbitMQOptions setReconnectInterval(int reconnectInterval) {
+    this.reconnectInterval = reconnectInterval;
+    return this;
+  }
+
+  public int getReconnectAttempts() {
+    return reconnectAttempts;
+  }
+
+  public String getSecureTransportProtocol() {
+    return secureTransportProtocol;
+  }
+
+  public RabbitMQOptions setSecureTransportProtocol(String secureTransportProtocol) {
+    this.secureTransportProtocol = secureTransportProtocol;
+    return this;
+  }
+
+  public boolean isSsl() {
+    return ssl;
+  }
+
+  public JksOptions getKeyStoreOptions() {
+    return keyStoreOptions;
+  }  
+  
 }
