@@ -51,3 +51,4 @@ cd ..
 keytool -import -alias server1 -file server/server_certificate.pem -keystore localhost-test-rabbit-store
 ```
 
+Note that keystores are not backward compatible (i.e. if the keystore is created using JDK17 it may not be readable using JDK1.8).
