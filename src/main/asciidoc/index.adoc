@@ -92,8 +92,7 @@ See <<private_chain_connection>>
 
 In addition to the above the client may be configured to use client certificates to identify the user to the server (see <<public_chain_with_client_cert_connection>>).
 
-There are four options in the RabbitMQOptions that control TLS connections.
-Any other options that mention TLS are unused.
+There are five options in the RabbitMQOptions that control TLS connections.
 * EnabledSecureTransportProtocols
 This defaults to TLSv1.2 currently.
 Only a single value from this Set will be used, so only use a singleton Set.
@@ -107,14 +106,21 @@ verification.
 * TlsHostnameVerification
 If set to true (the default) the hostname in the server certificate will be verified.
 This should usually be true for public certificate but often needs to be false for private certificate authorities (or self-signed certs).
+* SslContextFactory
+If all else fails the SslContextFactory can be provided to have full control of the SSLContext used.
 
 This provides very simple defaults, if TrustAll is true anything will work, if TrustAll is false public certificate chains should work.
 Extra steps are only required for private certificate chains (or specific versions of TLS).
 
 ==== Unsecure TLS Connection [[unsecure_tls_connection]]
+{@link examples.RabbitMQExamples#createWithInsecureServer}
 ==== Public Certificate Chain TLS Connection [[public_chain_connection]]
+{@link examples.RabbitMQExamples#createWithPublicCertChain}
 ==== Private Certificate Chain with Secure TLS Connection [[private_chain_connection]]
+{@link examples.RabbitMQExamples#createWithSpecificCert}
 ==== Public Certificate Chain With Client Certificate TLS Connection [[public_chain_with_client_cert_connection]]
+==== Setting the SslContextFactory manually
+{@link examples.RabbitMQExamples#createWithSslContextFactory}
 
 
 == Operations

@@ -147,6 +147,11 @@ public class RabbitMQOptionsConverter {
             obj.setTrustAll((Boolean)member.getValue());
           }
           break;
+        case "trustStoreOptions":
+          if (member.getValue() instanceof JsonObject) {
+            obj.setTrustStoreOptions(new io.vertx.core.net.JksOptions((io.vertx.core.json.JsonObject)member.getValue()));
+          }
+          break;
         case "uri":
           if (member.getValue() instanceof String) {
             obj.setUri((String)member.getValue());
@@ -217,6 +222,9 @@ public class RabbitMQOptionsConverter {
       json.put("topologyRecoveryEnabled", obj.getTopologyRecoveryEnabled());
     }
     json.put("trustAll", obj.isTrustAll());
+    if (obj.getTrustStoreOptions() != null) {
+      json.put("trustStoreOptions", obj.getTrustStoreOptions().toJson());
+    }
     if (obj.getUri() != null) {
       json.put("uri", obj.getUri());
     }

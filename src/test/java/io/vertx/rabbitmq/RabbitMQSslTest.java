@@ -21,6 +21,10 @@ import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.RunTestOnContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
+import java.io.InputStream;
+import java.security.KeyStore;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
@@ -112,7 +116,7 @@ public class RabbitMQSslTest {
             .setUri("amqps://" + rabbitmq.getContainerIpAddress() + ":" + rabbitmq.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
             .setTlsHostnameVerification(false)
-            .setKeyStoreOptions(
+            .setTrustStoreOptions(
                     new JksOptions()
                             .setPassword("password")
                             .setPath(fullPathForResource("/ssl-server/localhost-test-rabbit-store")
@@ -138,14 +142,62 @@ public class RabbitMQSslTest {
               }
             });
   }
-    
+
+  
+  @Test
+  public void testCreateWithSslContextFactory(TestContext context) throws Exception {
+    RabbitMQOptions config = new RabbitMQOptions()
+            .setUri("amqps://" + rabbitmq.getContainerIpAddress() + ":" + rabbitmq.getMappedPort(5671))
+            .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
+            .setTlsHostnameVerification(false)
+            .setSslContextFactory((String name) -> {
+              logger.info("Creating SSL Context for {}", name);
+              SSLContext c = null;
+              try {
+                char[] trustPassphrase = "password".toCharArray();
+                KeyStore tks = KeyStore.getInstance("JKS");
+                InputStream tustKeyStoreStream = this.getClass().getResourceAsStream("/ssl-server/localhost-test-rabbit-store");
+                tks.load(tustKeyStoreStream, trustPassphrase);
+
+                TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
+                tmf.init(tks);
+
+                // com.rabbitmq:amqp-client:5.13.1 (at least) hangs when using TLSv1.3 with NIO
+                c = SSLContext.getInstance("TLSv1.2");
+                c.init(null, tmf.getTrustManagers(), null);
+              } catch(Exception ex) {
+                logger.error("Failed to prepare SSLContext: ", ex);
+              }
+              return c;
+            })
+            ;
+
+    RabbitMQConnection connection = RabbitMQClient.create(testRunContext.vertx(), config);
+    RabbitMQChannel channel = connection.createChannel();
+    Async async = context.async();
+    channel.connect()
+            .compose(v -> channel.exchangeDeclare("testCreateWithSpecificCert", BuiltinExchangeType.FANOUT, true, true, null))
+            .onComplete(ar -> {
+              if (ar.succeeded()) {
+                logger.info("Exchange declared");
+                logger.info("Completing test");
+                connection.close().onComplete(ar2 -> {
+                  async.complete();                     
+                });
+              } else {
+                logger.info("Failing test");
+                context.fail(ar.cause());
+              }
+            });
+  }
+  
   @Test
   public void testFailWithSpecificCert(TestContext context) throws Exception {
     RabbitMQOptions config = new RabbitMQOptions()
             .setUri("amqps://" + rabbitmq.getContainerIpAddress() + ":" + rabbitmq.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
             // .setTlsHostnameVerification(false)
-            .setKeyStoreOptions(
+            .setTrustStoreOptions(
                     new JksOptions()
                             .setPassword("password")
                             .setPath(fullPathForResource("/ssl-server/localhost-test-rabbit-store")

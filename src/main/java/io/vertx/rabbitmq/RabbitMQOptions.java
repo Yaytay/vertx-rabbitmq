@@ -195,6 +195,7 @@ public class RabbitMQOptions {
   private boolean trustAll;
   private String secureTransportProtocol;
   private JksOptions keyStoreOptions;
+  private JksOptions trustStoreOptions;
   
   // These three control the java RabbitMQ client automatic recovery
   private boolean automaticRecoveryEnabled;
@@ -267,6 +268,7 @@ public class RabbitMQOptions {
     this.trustAll = other.trustAll;
     this.secureTransportProtocol = other.secureTransportProtocol;
     this.keyStoreOptions = other.keyStoreOptions;
+    this.trustStoreOptions = other.trustStoreOptions;
     
     this.channelRpcTimeout = other.channelRpcTimeout;
     this.channelShouldCheckRpcResponseType = other.channelShouldCheckRpcResponseType;
@@ -684,224 +686,252 @@ public class RabbitMQOptions {
     return channelRpcTimeout;
   }
 
-  public void setChannelRpcTimeout(int channelRpcTimeout) {
+  public RabbitMQOptions setChannelRpcTimeout(int channelRpcTimeout) {
     this.channelRpcTimeout = channelRpcTimeout;
+    return this;
   }
 
   public boolean isChannelShouldCheckRpcResponseType() {
     return channelShouldCheckRpcResponseType;
   }
 
-  public void setChannelShouldCheckRpcResponseType(boolean channelShouldCheckRpcResponseType) {
+  public RabbitMQOptions setChannelShouldCheckRpcResponseType(boolean channelShouldCheckRpcResponseType) {
     this.channelShouldCheckRpcResponseType = channelShouldCheckRpcResponseType;
+    return this;
   }
 
   public Map<String, Object> getClientProperties() {
     return clientProperties;
   }
 
-  public void setClientProperties(Map<String, Object> clientProperties) {
+  public RabbitMQOptions setClientProperties(Map<String, Object> clientProperties) {
     this.clientProperties = clientProperties;
+    return this;
   }
 
   public Predicate<ShutdownSignalException> getConnectionRecoveryTriggeringCondition() {
     return connectionRecoveryTriggeringCondition;
   }
 
-  public void setConnectionRecoveryTriggeringCondition(Predicate<ShutdownSignalException> connectionRecoveryTriggeringCondition) {
+  public RabbitMQOptions setConnectionRecoveryTriggeringCondition(Predicate<ShutdownSignalException> connectionRecoveryTriggeringCondition) {
     this.connectionRecoveryTriggeringCondition = connectionRecoveryTriggeringCondition;
+    return this;
   }
 
   public CredentialsProvider getCredentialsProvider() {
     return credentialsProvider;
   }
 
-  public void setCredentialsProvider(CredentialsProvider credentialsProvider) {
+  public RabbitMQOptions setCredentialsProvider(CredentialsProvider credentialsProvider) {
     this.credentialsProvider = credentialsProvider;
+    return this;
   }
 
   public CredentialsRefreshService getCredentialsRefreshService() {
     return credentialsRefreshService;
   }
 
-  public void setCredentialsRefreshService(CredentialsRefreshService credentialsRefreshService) {
+  public RabbitMQOptions setCredentialsRefreshService(CredentialsRefreshService credentialsRefreshService) {
     this.credentialsRefreshService = credentialsRefreshService;
+    return this;
   }
 
   public ErrorOnWriteListener getErrorOnWriteListener() {
     return errorOnWriteListener;
   }
 
-  public void setErrorOnWriteListener(ErrorOnWriteListener errorOnWriteListener) {
+  public RabbitMQOptions setErrorOnWriteListener(ErrorOnWriteListener errorOnWriteListener) {
     this.errorOnWriteListener = errorOnWriteListener;
+    return this;
   }
 
   public ExceptionHandler getExceptionHandler() {
     return exceptionHandler;
   }
 
-  public void setExceptionHandler(ExceptionHandler exceptionHandler) {
+  public RabbitMQOptions setExceptionHandler(ExceptionHandler exceptionHandler) {
     this.exceptionHandler = exceptionHandler;
+    return this;
   }
 
   public ScheduledExecutorService getHeartbeatExecutor() {
     return heartbeatExecutor;
   }
 
-  public void setHeartbeatExecutor(ScheduledExecutorService heartbeatExecutor) {
+  public RabbitMQOptions setHeartbeatExecutor(ScheduledExecutorService heartbeatExecutor) {
     this.heartbeatExecutor = heartbeatExecutor;
+    return this;
   }
 
   public MetricsCollector getMetricsCollector() {
     return metricsCollector;
   }
 
-  public void setMetricsCollector(MetricsCollector metricsCollector) {
+  public RabbitMQOptions setMetricsCollector(MetricsCollector metricsCollector) {
     this.metricsCollector = metricsCollector;
+    return this;
   }
 
   public NioParams getNioParams() {
     return nioParams;
   }
 
-  public void setNioParams(NioParams nioParams) {
+  public RabbitMQOptions setNioParams(NioParams nioParams) {
     this.nioParams = nioParams;
+    return this;
   }
 
   public int getRequestedFrameMax() {
     return requestedFrameMax;
   }
 
-  public void setRequestedFrameMax(int requestedFrameMax) {
+  public RabbitMQOptions setRequestedFrameMax(int requestedFrameMax) {
     this.requestedFrameMax = requestedFrameMax;
+    return this;
   }
 
   public RecoveredQueueNameSupplier getRecoveredQueueNameSupplier() {
     return recoveredQueueNameSupplier;
   }
 
-  public void setRecoveredQueueNameSupplier(RecoveredQueueNameSupplier recoveredQueueNameSupplier) {
+  public RabbitMQOptions setRecoveredQueueNameSupplier(RecoveredQueueNameSupplier recoveredQueueNameSupplier) {
     this.recoveredQueueNameSupplier = recoveredQueueNameSupplier;
+    return this;
   }
 
   public RecoveryDelayHandler getRecoveryDelayHandler() {
     return recoveryDelayHandler;
   }
 
-  public void setRecoveryDelayHandler(RecoveryDelayHandler recoveryDelayHandler) {
+  public RabbitMQOptions setRecoveryDelayHandler(RecoveryDelayHandler recoveryDelayHandler) {
     this.recoveryDelayHandler = recoveryDelayHandler;
+    return this;
   }
 
   public int getShutdownTimeout() {
     return shutdownTimeout;
   }
 
-  public void setShutdownTimeout(int shutdownTimeout) {
+  public RabbitMQOptions setShutdownTimeout(int shutdownTimeout) {
     this.shutdownTimeout = shutdownTimeout;
+    return this;
   }
 
   public SaslConfig getSaslConfig() {
     return saslConfig;
   }
 
-  public void setSaslConfig(SaslConfig saslConfig) {
+  public RabbitMQOptions setSaslConfig(SaslConfig saslConfig) {
     this.saslConfig = saslConfig;
+    return this;
   }
 
   public ExecutorService getSharedExecutor() {
     return sharedExecutor;
   }
 
-  public void setSharedExecutor(ExecutorService sharedExecutor) {
+  public RabbitMQOptions setSharedExecutor(ExecutorService sharedExecutor) {
     this.sharedExecutor = sharedExecutor;
+    return this;
   }
 
   public ExecutorService getShutdownExecutor() {
     return shutdownExecutor;
   }
 
-  public void setShutdownExecutor(ExecutorService shutdownExecutor) {
+  public RabbitMQOptions setShutdownExecutor(ExecutorService shutdownExecutor) {
     this.shutdownExecutor = shutdownExecutor;
+    return this;
   }
 
   public SocketConfigurator getSocketConfigurator() {
     return socketConfigurator;
   }
 
-  public void setSocketConfigurator(SocketConfigurator socketConfigurator) {
+  public RabbitMQOptions setSocketConfigurator(SocketConfigurator socketConfigurator) {
     this.socketConfigurator = socketConfigurator;
+    return this;
   }
 
   public SocketFactory getSocketFactory() {
     return socketFactory;
   }
 
-  public void setSocketFactory(SocketFactory socketFactory) {
+  public RabbitMQOptions setSocketFactory(SocketFactory socketFactory) {
     this.socketFactory = socketFactory;
+    return this;
   }
 
   public SslContextFactory getSslContextFactory() {
     return sslContextFactory;
   }
 
-  public void setSslContextFactory(SslContextFactory sslContextFactory) {
+  public RabbitMQOptions setSslContextFactory(SslContextFactory sslContextFactory) {
     this.sslContextFactory = sslContextFactory;
+    return this;
   }
 
   public Boolean getTopologyRecoveryEnabled() {
     return topologyRecoveryEnabled;
   }
 
-  public void setTopologyRecoveryEnabled(Boolean topologyRecoveryEnabled) {
+  public RabbitMQOptions setTopologyRecoveryEnabled(Boolean topologyRecoveryEnabled) {
     this.topologyRecoveryEnabled = topologyRecoveryEnabled;
+    return this;
   }
 
   public ThreadFactory getThreadFactory() {
     return threadFactory;
   }
 
-  public void setThreadFactory(ThreadFactory threadFactory) {
+  public RabbitMQOptions setThreadFactory(ThreadFactory threadFactory) {
     this.threadFactory = threadFactory;
+    return this;
   }
 
   public ExecutorService getTopologyRecoveryExecutor() {
     return topologyRecoveryExecutor;
   }
 
-  public void setTopologyRecoveryExecutor(ExecutorService topologyRecoveryExecutor) {
+  public RabbitMQOptions setTopologyRecoveryExecutor(ExecutorService topologyRecoveryExecutor) {
     this.topologyRecoveryExecutor = topologyRecoveryExecutor;
+    return this;
   }
 
   public TopologyRecoveryFilter getTopologyRecoveryFilter() {
     return topologyRecoveryFilter;
   }
 
-  public void setTopologyRecoveryFilter(TopologyRecoveryFilter topologyRecoveryFilter) {
+  public RabbitMQOptions setTopologyRecoveryFilter(TopologyRecoveryFilter topologyRecoveryFilter) {
     this.topologyRecoveryFilter = topologyRecoveryFilter;
+    return this;
   }
 
   public RetryHandler getTopologyRecoveryRetryHandler() {
     return topologyRecoveryRetryHandler;
   }
 
-  public void setTopologyRecoveryRetryHandler(RetryHandler topologyRecoveryRetryHandler) {
+  public RabbitMQOptions setTopologyRecoveryRetryHandler(RetryHandler topologyRecoveryRetryHandler) {
     this.topologyRecoveryRetryHandler = topologyRecoveryRetryHandler;
+    return this;
   }
 
   public TrafficListener getTrafficListener() {
     return trafficListener;
   }
 
-  public void setTrafficListener(TrafficListener trafficListener) {
+  public RabbitMQOptions setTrafficListener(TrafficListener trafficListener) {
     this.trafficListener = trafficListener;
+    return this;
   }
 
   public int getWorkPoolTimeout() {
     return workPoolTimeout;
   }
 
-  public void setWorkPoolTimeout(int workPoolTimeout) {
+  public RabbitMQOptions setWorkPoolTimeout(int workPoolTimeout) {
     this.workPoolTimeout = workPoolTimeout;
+    return this;
   }
 
   public boolean isTlsHostnameVerification() {
@@ -937,5 +967,15 @@ public class RabbitMQOptions {
   public JksOptions getKeyStoreOptions() {
     return keyStoreOptions;
   }  
+
+  public JksOptions getTrustStoreOptions() {
+    return trustStoreOptions;
+  }
+
+  public RabbitMQOptions setTrustStoreOptions(JksOptions trustStoreOptions) {
+    this.trustStoreOptions = trustStoreOptions;
+    return this;
+  }
+  
   
 }

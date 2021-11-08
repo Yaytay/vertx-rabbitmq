@@ -282,19 +282,21 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
       String secureTransportProtocol = config.getSecureTransportProtocol();
       
       SSLContext sslContext = SSLContext.getInstance(secureTransportProtocol);
-      JksOptions kco = config.getKeyStoreOptions();
+      JksOptions kso = config.getKeyStoreOptions();
       KeyManager km[] = null;
-      TrustManager tm[] = null;
-      if (kco != null) {
-        KeyManagerFactory kmf = kco.getKeyManagerFactory(vertx);
+      if (kso != null) {
+        KeyManagerFactory kmf = kso.getKeyManagerFactory(vertx);
         if (kmf != null) {
           km = kmf.getKeyManagers();
         }        
-        TrustManagerFactory tmf = kco.getTrustManagerFactory(vertx);
+      }
+      JksOptions tso = config.getTrustStoreOptions();
+      TrustManager tm[] = null;
+      if (tso != null) {
+        TrustManagerFactory tmf = tso.getTrustManagerFactory(vertx);
         if (tmf  != null) {
           tm = tmf.getTrustManagers();
         }
-        sslContext.init(km, tm, null);
       }
       sslContext.init(km, tm, null);      
       cf.useSslProtocol(sslContext);

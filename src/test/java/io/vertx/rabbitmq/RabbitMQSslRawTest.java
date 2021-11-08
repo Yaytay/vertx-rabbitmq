@@ -140,5 +140,43 @@ public class RabbitMQSslRawTest {
     conn.close();
 
   }
+  
+  @Test
+  public void testSslWithSslContextFactory() throws Throwable {
+
+    ConnectionFactory factory = new ConnectionFactory();
+    factory.setSslContextFactory((String name) -> {
+      logger.info("Creating SSL Context for {}", name);
+      SSLContext c = null;
+      try {
+        char[] trustPassphrase = "password".toCharArray();
+        KeyStore tks = KeyStore.getInstance("JKS");
+        InputStream tustKeyStoreStream = this.getClass().getResourceAsStream("/ssl-server/localhost-test-rabbit-store");
+        tks.load(tustKeyStoreStream, trustPassphrase);
+
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
+        tmf.init(tks);
+
+        // com.rabbitmq:amqp-client:5.13.1 (at least) hangs when using TLSv1.3 with NIO
+        c = SSLContext.getInstance("TLSv1.2");
+        c.init(null, tmf.getTrustManagers(), null);
+      } catch(Exception ex) {
+        logger.error("Failed to prepare SSLContext: ", ex);
+      }
+      return c;
+    });
+    factory.useNio();
+    // factory.enableHostnameVerification();
+    factory.setHost("localhost");
+    factory.setPort(rabbitmq.getMappedPort(5671));
+
+    Connection conn = factory.newConnection("testSslWithSslContextFactory");
+    assertNotNull(conn);
+    Channel channel = conn.createChannel();
+    channel.queueDeclare("queue", true, true, true, null);
+    logger.info("Connected");
+    conn.close();
+
+  }
 
 }
