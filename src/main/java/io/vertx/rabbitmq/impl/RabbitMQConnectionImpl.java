@@ -312,18 +312,41 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   }
   
   protected boolean shouldRetryConnection() {
-    if ((config.getReconnectInterval() > 0) && !closed) {
-      if (connectedAtLeastOnce) {
-        if (((config.getReconnectAttempts() < 0) || config.getReconnectAttempts() > reconnectCount)) {
-          ++reconnectCount;
-          return true;
-        }
-      } else if ((config.getInitialConnectAttempts() < 0) || config.getInitialConnectAttempts() > reconnectCount) {
+    if (closed) {
+      logger.debug("Not retrying connection because close has been called");
+      return false;      
+    }
+    if (config.getReconnectInterval() <= 0) {
+      logger.debug("Not retrying connection because reconnect internal ({}) <= 0", config.getReconnectInterval());
+      return false;      
+    }
+    if (connectedAtLeastOnce) {
+      if (config.getReconnectAttempts() < 0) {
+        logger.debug("Retrying because reconnect limit ({}) < 0", config.getReconnectAttempts()); 
         ++reconnectCount;
         return true;
-      }        
-    }
-    return false;
+      } else if (config.getReconnectAttempts() > reconnectCount) {
+        logger.debug("Retrying because reconnect count ({}) < limit ({})", reconnectCount, config.getReconnectAttempts()); 
+        ++reconnectCount;
+        return true;
+      } else {
+        logger.debug("Not retrying connection because reconnect count ({}) >= limit ({})", reconnectCount, config.getReconnectAttempts()); 
+        return false;
+      }
+    } else {
+      if (config.getInitialConnectAttempts() < 0) {
+        logger.debug("Retrying because initial reconnect limit ({}) < 0", config.getInitialConnectAttempts()); 
+        ++reconnectCount;
+        return true;
+      } else if (config.getInitialConnectAttempts() > reconnectCount) {
+        logger.debug("Retrying because reconnect count ({}) < initial limit ({})", reconnectCount, config.getInitialConnectAttempts()); 
+        ++reconnectCount;
+        return true;
+      } else {
+        logger.debug("Not retrying connection because reconnect count ({}) >= initial limit ({})", reconnectCount, config.getInitialConnectAttempts()); 
+        return false;
+      }
+    }        
   }
   
   private void connectBlocking(Promise<Connection> promise) {
