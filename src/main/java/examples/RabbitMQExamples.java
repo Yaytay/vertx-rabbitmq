@@ -156,10 +156,10 @@ public class RabbitMQExamples {
             .setUri("amqps://localhost:5671")
             .setConnectionName(ManagementFactory.getRuntimeMXBean().getName())
             .setTlsHostnameVerification(false)
-            .setKeyStoreOptions(
+            .setTrustStoreOptions(
                     new JksOptions()
                             .setPassword("password")
-                            .setPath("/etc/ssl-server/localhost-test-rabbit-store") // Full path to keystore file
+                            .setPath("/etc/ssl-server/localhost-test-rabbit-store") // Full path to trust store file
             )
             ;
 
@@ -232,6 +232,37 @@ public class RabbitMQExamples {
             .setConnectionName(ManagementFactory.getRuntimeMXBean().getName())
             ;
     
+    RabbitMQConnection connection = RabbitMQClient.create(vertx, config);
+    RabbitMQChannel channel = connection.createChannel();
+    channel.connect()
+            .compose(v -> channel.exchangeDeclare("exchange", BuiltinExchangeType.FANOUT, true, true, null))
+            .onComplete(ar -> {
+              if (ar.succeeded()) {
+                logger.info("Exchange declared");
+              } else {
+                logger.info("Failing test");
+              }
+            });
+  }
+  
+  public void createWithClientCert() throws Exception {
+    Vertx vertx = Vertx.vertx();
+    RabbitMQOptions config = new RabbitMQOptions()
+            .setUri("amqps://localhost:5671")
+            .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
+            .setTlsHostnameVerification(false)
+            .setTrustStoreOptions(
+                    new JksOptions()
+                            .setPassword("password")
+                            .setPath("/etc/ssl-server/localhost-test-rabbit-store") // Full path to trust store file
+            )
+            .setKeyStoreOptions(
+                    new JksOptions()
+                            .setPassword("password")
+                            .setPath("/etc/ssl-server/client/client_certificate.p12") // Full path to key store file
+            )
+            ;
+
     RabbitMQConnection connection = RabbitMQClient.create(vertx, config);
     RabbitMQChannel channel = connection.createChannel();
     channel.connect()

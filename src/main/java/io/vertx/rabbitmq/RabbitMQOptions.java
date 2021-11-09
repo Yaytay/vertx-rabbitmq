@@ -230,16 +230,26 @@ public class RabbitMQOptions {
   private RetryHandler topologyRecoveryRetryHandler;
   private TrafficListener trafficListener;
 
+  /**
+   * Default constructor.
+   */
   public RabbitMQOptions() {
-    super();
     init();
   }
 
+  /**
+   * Constructor for JSON representation.
+   * @param json A set of RabbitMQOptions as JSON.
+   */
   public RabbitMQOptions(JsonObject json) {
     init();
     RabbitMQOptionsConverter.fromJson(json, this);
   }
 
+  /**
+   * Copy constructor.
+   * @param other Another instance of RabbitMQOptions.
+   */
   public RabbitMQOptions(RabbitMQOptions other) {
     this.uri = other.uri;
     this.addresses = other.addresses;
@@ -296,6 +306,9 @@ public class RabbitMQOptions {
     this.trafficListener = other.trafficListener;
   }
 
+  /**
+   * Set all values that have non-null defaults to their default values.
+   */
   private void init() {
     this.uri = null;
     this.addresses = Collections.emptyList();
@@ -329,6 +342,12 @@ public class RabbitMQOptions {
     this.clientProperties = unLongStringMap(AMQConnection.defaultClientProperties());
   }
   
+  /**
+   * The default client properties for AMQConnection uses the @link com.rabbitmq.client.LongString} class, which cannot be converted to JSON.
+   * This method converts those LongStrings to plain Strings.
+   * @param src The Map that may include LongString objects.
+   * @return A Map that does not contain any LongString objects.
+   */
   private static Map<String, Object> unLongStringMap(Map<String, Object> src) {
     Map<String, Object> dst = new HashMap<>();
     src.forEach((k,v) -> {
@@ -343,6 +362,10 @@ public class RabbitMQOptions {
     return dst;
   }
 
+  /**
+   * Convert this object to JSON.
+   * @return this object, as JSON.
+   */
   public JsonObject toJson() {
     JsonObject json = new JsonObject();
     RabbitMQOptionsConverter.toJson(this, json);
@@ -351,6 +374,7 @@ public class RabbitMQOptions {
 
   /**
    * Get multiple addresses for cluster mode.
+   * This value will override the host and port properties, but will only be used if the URI is null.
    * @return addresses of AMQP cluster.
    */
   public List<Address> getAddresses() {
@@ -359,6 +383,7 @@ public class RabbitMQOptions {
 
   /**
    * Set multiple addresses for cluster mode.
+   * This value overrides the host and port properties, but will only be used if the URI is null.
    *
    * @param addresses addresses of AMQP cluster
    * @return a reference to this, so the API can be used fluently
@@ -377,7 +402,7 @@ public class RabbitMQOptions {
   }
 
   /**
-   * Set the fields host, port, username, password and virtual host in a single URI.
+   * Set the fields protocol, host, port, username, password and virtual host in a single URI.
    * @param uri The AMQP URI.
    * @return a reference to this, so the API can be used fluently
    */
@@ -387,7 +412,9 @@ public class RabbitMQOptions {
   }
 
   /**
-   * @return the AMQP user name to use when connecting to the broker
+   * Get the AMQP user name to use when connecting to the broker.
+   * Note that this values overrides the value set with {@link #setUri}.
+   * @return the AMQP user name to use when connecting to the broker.
    */
   public String getUser() {
     return user;
@@ -395,7 +422,7 @@ public class RabbitMQOptions {
 
   /**
    * Set the AMQP user name to use when connecting to the broker.
-   *
+   * Note that this will override the value set with {@link #setUri}.*
    * @param user the user name
    * @return a reference to this, so the API can be used fluently
    */
@@ -405,6 +432,8 @@ public class RabbitMQOptions {
   }
 
   /**
+   * Set the AMQP password to use when connecting to the broker.
+   * Note that this will override the value set with {@link #setUri}.*
    * @return the password to use when connecting to the broker
    */
   public String getPassword() {
@@ -414,6 +443,7 @@ public class RabbitMQOptions {
   /**
    * Set the password to use when connecting to the broker.
    *
+   * Note that this values overrides the value set with {@link #setUri}.
    * @param password the password
    * @return a reference to this, so the API can be used fluently
    */
@@ -423,16 +453,19 @@ public class RabbitMQOptions {
   }
 
   /**
-   * @return the default host to use for connections
+   * Get the host to use for connections.
+   * This value will only be used if neither URI nor Addresses are set.
+   * @return the host to use for connections
    */
   public String getHost() {
     return host;
   }
 
   /**
-   * Set the default host to use for connections.
+   * Set the host to use for connections.
    *
-   * @param host the default host
+   * This value is only used if neither URI nor Addresses are set.
+   * @param host the host
    * @return a reference to this, so the API can be used fluently
    */
   public RabbitMQOptions setHost(String host) {
@@ -441,6 +474,8 @@ public class RabbitMQOptions {
   }
 
   /**
+   * Get the virtual host to use when connecting to the broker.
+   * Note that this will override the value set with {@link #setUri}.*
    * @return the virtual host to use when connecting to the broker
    */
   public String getVirtualHost() {
@@ -449,6 +484,7 @@ public class RabbitMQOptions {
 
   /**
    * Set the virtual host to use when connecting to the broker.
+   * Note that this overrides the value set with {@link #setUri}.*
    *
    * @param virtualHost the virtual host
    * @return a reference to this, so the API can be used fluently
@@ -459,14 +495,17 @@ public class RabbitMQOptions {
   }
 
   /**
-   * @return the default port to use for connections
+   * Get the server port to use for connections.
+   * This value will only be used if neither URI nor Addresses are set.
+   * @return the port to use for connections.
    */
   public int getPort() {
     return port;
   }
 
   /**
-   * Set the default port to use for connections.
+   * Set the server port to use for connections.
+   * This value is only used if neither URI nor Addresses are set.
    *
    * @param port the default port
    * @return a reference to this, so the API can be used fluently
@@ -477,7 +516,10 @@ public class RabbitMQOptions {
   }
 
   /**
-   * @return the TCP connection timeout
+   * Get the TCP connection timeout, in milliseconds.
+   * 
+   * @return the TCP connection timeout.
+   * @see com.rabbitmq.client.ConnectionFactory#setConnectionTimeout
    */
   public int getConnectionTimeout() {
     return connectionTimeout;
@@ -488,6 +530,7 @@ public class RabbitMQOptions {
    *
    * @param connectionTimeout the timeouut in milliseconds.
    * @return a reference to this, so the API can be used fluently
+   * @see com.rabbitmq.client.ConnectionFactory#getConnectionTimeout
    */
   public RabbitMQOptions setConnectionTimeout(int connectionTimeout) {
     this.connectionTimeout = connectionTimeout;
