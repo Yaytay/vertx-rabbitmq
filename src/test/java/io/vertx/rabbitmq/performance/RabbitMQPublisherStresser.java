@@ -16,7 +16,6 @@
 package io.vertx.rabbitmq.performance;
 
 import io.vertx.core.Future;
-import io.vertx.rabbitmq.RabbitMQConnection;
 
 /**
  *
