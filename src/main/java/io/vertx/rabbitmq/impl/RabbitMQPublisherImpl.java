@@ -201,15 +201,18 @@ public class RabbitMQPublisherImpl implements RabbitMQRepublishingPublisher, Rea
   private boolean wasIoRelated(Throwable ex) {
     while(ex != null) {
       if (ex instanceof IOException) {
+        log.debug("Exception was IO related");
         return true;
       }
       ex = ex.getCause();
     }
+    log.debug("Exception was not IO related");
     return false;
   }
   
   private void doSend(MessageDetails md) {
     try {
+      log.debug("doSend({})", md.message);
       channel.basicPublish(md.exchange, md.routingKey, false, md.properties, md.message, dt -> { md.setDeliveryTag(lastChannelId, dt); })
               .onComplete(ar -> {
                 sendQueue.resume();
