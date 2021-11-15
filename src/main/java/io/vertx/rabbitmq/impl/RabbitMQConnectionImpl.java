@@ -371,6 +371,8 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   
   public Future<Channel> openChannel(long lastInstance) {
     synchronized(connectingPromiseLock) {
+      logger.debug("ConnectionFuture: {}, lastInstance: {}, connectCount: {}, closed: {}"
+              , connectingFuture, lastInstance, this.connectCount.get(), closed);
       if (((connectingFuture == null) || (lastInstance != this.connectCount.get())) && !closed) {
         synchronized(connectionLock) {       
           if (lastConnectedInstance != connectCount.get()) {
