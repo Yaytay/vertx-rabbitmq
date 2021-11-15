@@ -388,15 +388,15 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
                     promise.complete(conn.createChannel());
                   } catch(AlreadyClosedException | IOException ex) {
                     logger.error("Failed to create channel: ", ex);
-                    synchronized(connectingPromiseLock) {
-                      try {
-                        conn.abort();
-                      } catch(Throwable ex2) {
-                        logger.warn("Failed to abort existing connect (should be harmless): ", ex);
-                      }
-                      connectingFuture = null;
-                    }
                     if (shouldRetryConnection()) {
+                      synchronized(connectingPromiseLock) {
+                        try {
+                          conn.abort();
+                        } catch(Throwable ex2) {
+                          logger.warn("Failed to abort existing connect (should be harmless): ", ex);
+                        }
+                        connectingFuture = null;
+                      }
                       openChannel(lastInstance).onComplete(promise);
                     }
                     promise.fail(ex);
