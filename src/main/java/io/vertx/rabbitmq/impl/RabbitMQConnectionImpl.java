@@ -17,6 +17,7 @@ package io.vertx.rabbitmq.impl;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Address;
+import com.rabbitmq.client.AlreadyClosedException;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
@@ -385,7 +386,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
                 return context.executeBlocking(promise -> {
                   try {                    
                     promise.complete(conn.createChannel());
-                  } catch(IOException ex) {
+                  } catch(AlreadyClosedException | IOException ex) {
                     logger.error("Failed to create channel: ", ex);
                     synchronized(connectingPromiseLock) {
                       try {
