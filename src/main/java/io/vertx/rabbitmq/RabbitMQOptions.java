@@ -158,10 +158,11 @@ public class RabbitMQOptions {
    * The default ENABLED_SECURE_TRANSPORT_PROTOCOLS value = { "TLSv1.2" }
    * <p/>
    * RabbitMQ usually supports only TLSv1.2 and TLSv1.3 (if correctly configured).
-   * Currently there is an issue with the Java client that prevents TLSv1.3 from working with NIO (should be fixed in v5.13.1).
+   * There was an issue with the Java client that prevents TLSv1.3 from working with NIO (fixed in v5.14.0)
+   * , if an earlier version of the library is being used please set the secureTransportProtocol to "TLSv1.2".
    * The RabbitMQ client does not do protocol negotiation, so this set should contain only one value.
    */
-  public static final String DEFAULT_SECURE_TRANSPORT_PROTOCOL = "TLSv1.2";
+  public static final String DEFAULT_SECURE_TRANSPORT_PROTOCOL = "TLSv1.3";
   
   /**
    * The default DEFAULT_ENABLED_TLS_HOSTNAME_VERIFICATION value = true
